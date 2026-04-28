@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Facebook, MessageCircle, Star, Share2 } from 'lucide-react';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function Footer() {
   const handleShare = async () => {
@@ -14,13 +15,16 @@ export default function Footer() {
         await navigator.share(shareData);
       } else {
         const textToShare = `${shareData.title}\n${shareData.text}\n${shareData.url}`;
-        const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(textToShare)}`;
+        const whatsappUrl = `${WHATSAPP_CONFIG.baseUrl}?text=${encodeURIComponent(textToShare)}`;
         window.open(whatsappUrl, '_blank');
       }
     } catch (err) {
       console.log('Compartilhamento cancelado ou falhou', err);
     }
   };
+
+  const contactUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá!')}`;
+  const devUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá! Vi o cardápio da Tri Burgers e gostaria de um orçamento para meu estabelecimento.')}`;
 
   return (
     <footer className="bg-black text-white pt-24 pb-12 border-t border-white/10 relative overflow-hidden">
@@ -41,7 +45,7 @@ export default function Footer() {
               <a href="https://www.instagram.com/triburgersgourmet/" target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-red-600 hover:bg-red-600/10 transition-all group">
                 <Instagram size={20} className="group-hover:scale-110 transition-transform" />
               </a>
-              <a href={`https://wa.me/5562991778064?text=${encodeURIComponent('Olá!')}`} target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-green-500 hover:bg-green-500/10 transition-all group" title="WhatsApp">
+              <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-green-500 hover:bg-green-500/10 transition-all group" title="WhatsApp">
                 <MessageCircle size={20} className="group-hover:scale-110 transition-transform" />
               </a>
               <a href="https://g.page/r/CTufWNHrYHk6EAE/review" target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 transition-all group" title="Avalie-nos no Google">
@@ -93,7 +97,7 @@ export default function Footer() {
         
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
           <p>© 2026 Tri Burgers Gourmet. Todos os direitos reservados. <Link to="/admin" className="ml-2 hover:text-white transition-colors opacity-50 hover:opacity-100">Área Admin</Link></p>
-          <p className="flex items-center gap-2">Desenvolvido com <span className="text-red-600">⚡</span> por <a href="https://wa.me/5562991778064?text=Olá!%20Vi%20o%20cardápio%20da%20Tri%20Burgers%20e%20gostaria%20de%20um%20orçamento%20para%20o%20meu%20estabelecimento." target="_blank" rel="noopener noreferrer" className="text-white hover:text-red-500 transition-colors underline decoration-white/30 underline-offset-4">Jan Carle | Negócios Locais</a></p>
+          <p className="flex items-center gap-2">Desenvolvido com <span className="text-red-600">⚡</span> por <a href={devUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-red-500 transition-colors underline decoration-white/30 underline-offset-4">Jan Carle | Negócios Locais</a></p>
         </div>
       </div>
     </footer>

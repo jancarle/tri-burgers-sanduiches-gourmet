@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, Plus, Minus, Trash2, Send } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function Cart() {
   const { cart, cartTotal, cartQuantity, updateQuantity, removeFromCart, isCartOpen, setIsCartOpen, clearCart, isStoreOpen } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [formError, setFormError] = useState('');
-
-  const whatsappNumber = '5562991778064';
 
   const handleCheckout = async () => {
     if (!isStoreOpen) {
@@ -42,7 +41,7 @@ export default function Cart() {
     message += `*Endereço:* (Prezado cliente, queira por favor, enviar sua localização ou endereço abaixo)\n`;
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+    const whatsappUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodedMessage}`;
     
     // Abre o WhatsApp imediatamente, antes de qualquer operação assíncrona
     window.open(whatsappUrl, '_blank');

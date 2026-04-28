@@ -1,9 +1,10 @@
 import { motion } from 'motion/react';
 import { Phone, Mail, MapPin, Instagram, Facebook, MessageCircle } from 'lucide-react';
 import FAQ from '../components/FAQ';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function Contact() {
-  const whatsappNumber = '5562991778064';
+  const whatsappUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}`;
 
   return (
     <div className="bg-black text-white font-sans">
@@ -23,13 +24,13 @@ export default function Contact() {
             Sua fome não espera e nós também não. Chame agora e garanta o melhor burger da sua vida.
           </p>
         </div>
-
+ 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 mb-16">
           {/* Contact Info */}
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <a 
-                href={`https://wa.me/${whatsappNumber}`}
+                href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-10 bg-zinc-900/50 rounded-[3rem] border border-white/5 hover:border-green-500/50 transition-all group relative overflow-hidden"

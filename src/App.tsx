@@ -19,10 +19,12 @@ import MasterAdmin from './pages/MasterAdmin'; // Agency Admin page
 import Cart from './components/Cart';
 import { CartProvider } from './contexts/CartContext';
 import { AlertTriangle, Phone } from 'lucide-react';
-import { MENU_ITEMS } from './constants';
+import { MENU_ITEMS, WHATSAPP_CONFIG } from './constants';
 import { Toaster } from 'sonner';
 
 function SuspendedPage() {
+  const supportUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá suporte, minha loja encontra-se suspensa e gostaria de regularizar meu acesso para voltar a receber pedidos no meu cardápio.')}`;
+
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4 text-center">
       <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl">
@@ -41,7 +43,7 @@ function SuspendedPage() {
           </p>
         </div>
         <a 
-          href={`https://wa.me/5562991778064?text=${encodeURIComponent('Olá suporte, minha loja encontra-se suspensa e gostaria de regularizar meu acesso para voltar a receber pedidos no meu cardápio.')}`}
+          href={supportUrl}
           target="_blank"
           className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-6 rounded-lg transition"
         >

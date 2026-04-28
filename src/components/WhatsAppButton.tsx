@@ -1,11 +1,11 @@
 import { MessageCircle } from 'lucide-react';
 import { motion, useScroll, useMotionValueEvent } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function WhatsAppButton() {
-  const whatsappNumber = '5562991778064';
   const message = encodeURIComponent('Olá! Gostaria de falar com o atendimento.');
-  const url = `https://wa.me/${whatsappNumber}?text=${message}`;
+  const url = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${message}`;
 
   const [isVisible, setIsVisible] = useState(true);
   const { scrollY } = useScroll();

@@ -1,9 +1,9 @@
 import { motion } from 'motion/react';
 import { MessageCircle, ShoppingCart, Clock, ShieldCheck } from 'lucide-react';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function WhatsAppSpecial() {
-  const whatsappNumber = '5562991778064';
-  const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Olá! Vi o site e quero fazer um pedido agora.')}`;
+  const url = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá! Vi o site e quero fazer um pedido agora.')}`;
 
   return (
     <section className="py-8 md:py-12 bg-zinc-900 relative overflow-hidden">

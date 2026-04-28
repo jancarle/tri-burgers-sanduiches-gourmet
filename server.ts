@@ -63,24 +63,29 @@ async function startServer() {
 
     if (adminInitialized) {
       try {
+        console.log(`🔍 Buscando metadados para o produto: ${productId}`);
         const doc = await admin.firestore().collection("menu").doc(productId).get();
         if (doc.exists) {
           const data = doc.data();
+          console.log(`✅ Produto encontrado: ${data?.name}`);
           productData = {
             name: data?.name || productData.name,
             description: data?.description ? `${data.description.substring(0, 150)}... Clique para ver mais!` : productData.description,
             image: data?.image || productData.image
           };
           
-          // Se o preço existir, adiciona à descrição
           if (data?.price) {
             const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.price);
             productData.description = `${formattedPrice} - ${productData.description}`;
           }
+        } else {
+          console.warn(`⚠️ Produto ${productId} não encontrado no Firestore. Usando metadados genéricos.`);
         }
       } catch (err) {
-        console.error("Erro ao buscar produto para OG:", err);
+        console.error("❌ Erro ao buscar produto para OG:", err);
       }
+    } else {
+      console.warn("⚠️ Firebase Admin não inicializado. Verifique se FIREBASE_SERVICE_ACCOUNT está configurado na Vercel.");
     }
 
     // Garante que a imagem seja um URL absoluto
@@ -88,6 +93,7 @@ async function startServer() {
       productData.image = `${baseUrl}${productData.image.startsWith('/') ? '' : '/'}${productData.image}`;
     }
 
+    const shareUrl = `${baseUrl}/share/${productId}`;
     const redirectUrl = `${baseUrl}/?p=${productId}`;
 
     const html = `
@@ -103,8 +109,10 @@ async function startServer() {
     <meta property="og:title" content="${productData.name}">
     <meta property="og:description" content="${productData.description}">
     <meta property="og:image" content="${productData.image}">
-    <meta property="og:url" content="${redirectUrl}">
-    <meta property="og:site_name" content="Cardápio Digital">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="${shareUrl}">
+    <meta property="og:site_name" content="Tri Burgers">
     
     <!-- Meta tags adicionais para Twitter e outros -->
     <meta name="twitter:card" content="summary_large_image">
@@ -121,13 +129,13 @@ async function startServer() {
             justify-content: center;
             height: 100vh;
             margin: 0;
-            background-color: #f8f9fa;
-            color: #333;
+            background-color: #000;
+            color: #fff;
             text-align: center;
         }
         .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #e11d48;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid #ef4444;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -138,19 +146,19 @@ async function startServer() {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        h1 { font-size: 1.5rem; margin-bottom: 10px; }
-        p { color: #666; }
+        h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 900; text-transform: uppercase; }
+        p { color: #a1a1aa; }
     </style>
     
     <!-- Redirecionamento instantâneo via JS -->
     <script>
         setTimeout(() => {
-            window.location.href = "${redirectUrl}";
+            window.location.replace("${redirectUrl}");
         }, 500);
     </script>
     
     <!-- Fallback caso o JS falhe -->
-    <meta http-equiv="refresh" content="3;url=${redirectUrl}">
+    <meta http-equiv="refresh" content="2;url=${redirectUrl}">
 </head>
 <body>
     <div class="loader"></div>
@@ -179,34 +187,27 @@ async function startServer() {
       
       const prompt = `
       Crie um post de marketing IRRESISTÍVEL para WhatsApp e Instagram.
-      Foque em DESEJO e FOMO (medo de ficar de fora).
-      
-      DADOS DO PRODUTO (USE ESTES DADOS):
-      Nome do Produto: ${product.name}
-      Ingredientes/Descrição: ${product.description}
-      Preço de Venda: ${product.price}
-      Categoria: ${product.category}
-      
-      ESTRUTURA OBRIGATÓRIA (Siga exatamente):
-      1. TÍTULO DE IMPACTO: Mencione obrigatoriamente o nome do produto em CAPS LOCK + 1 emoji. (Ex: O MELHOR ${product.name.toUpperCase()} QUE VOCÊ VAI VER HOJE! 😍)
-      
-      2. CORPO DO TEXTO (Storytelling): 2 a 3 parágrafos curtos. Fale sobre como o *${product.name}* é suculento e imperdível.
-      
-      3. LISTA DE DELÍCIAS: Liste os ingredientes do ${product.name} usando o emoji ✅.
-      
-      4. PREÇO DESTACADO: Coloque o preço em uma linha isolada de forma chamativa.
-      
-      5. LINK DA FOTO: Coloque o link abaixo em uma linha separada:
-      ${shareLink}
-      
-      6. CALL TO ACTION: Uma frase final convidando a pedir agora + emojis.
-      
+      FOCO: DESEJO, FOMO e VENDAS RÁPIDAS.
+
+      DADOS DO PRODUTO (USE ESTES DADOS OBRIGATORIAMENTE):
+      NOME: "${product.name}"
+      DESCRIÇÃO: "${product.description}"
+      PREÇO: ${product.price}
+      CATEGORIA: ${product.category}
+      LINK DA FOTO: ${shareLink}
+
+      REGRAS RÍGIDAS DE CONTEÚDO:
+      1. TÍTULO: O post DEVE começar com o nome do produto: "*${product.name.toUpperCase()}* 🍔" em negrito e destaque.
+      2. PERSUASÃO: Escreva 2 parágrafos curtos descrevendo por que o cliente PRECISA comer isso agora. Fale do sabor, da suculência e da pressa.
+      3. INGREDIENTES: Liste os ingredientes usando emojis ✅.
+      4. PREÇO: Destaque o preço em uma linha separada: "*Valor: ${product.price}*".
+      5. LINK: Adicione o link ${shareLink} no final com a frase "Veja a foto aqui:".
+      6. CTA: Termine com "Clique no link acima para ver a foto real e peça o seu antes que acabe! 🚀🔥".
+
       REGRAS VISUAIS:
-      - Use DUAS QUEBRAS DE LINHA entre cada seção.
-      - Use APENAS estes emojis: 🍔, 🔥, 🤤, 🍟, 🥤, ✅, 🥓, ✨, 📦, 📍, 🚀.
-      - Formate com *Asteriscos* para negrito (padrão WhatsApp).
-      
-      Retorne APENAS o texto pronto para copiar e colar. Sem introduções ou explicações.
+      - Use duas quebras de linha entre cada bloco.
+      - Use negrito (*texto*) no nome do produto e no preço.
+      - NÃO adicione introduções como "Aqui está seu post". Retorne APENAS o conteúdo para copiar.
       `;
 
       const response = await ai.models.generateContent({

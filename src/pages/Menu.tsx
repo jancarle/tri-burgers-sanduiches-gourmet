@@ -7,6 +7,7 @@ import { collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMemo, useEffect, useState } from 'react';
 import { useCart } from '../contexts/CartContext';
+import { WHATSAPP_CONFIG } from '../constants';
 
 export default function Menu() {
   const [snapshot, loading] = useCollectionData(collection(db, 'menu'));
@@ -48,11 +49,9 @@ export default function Menu() {
 
   const categories = Array.from(new Set(allItems.map((item) => item.category))) as Category[];
 
-  const whatsappNumber = '5562991778064';
-
   const handleOrder = (itemName: string) => {
     const message = encodeURIComponent(`Olá! Gostaria de pedir o item: ${itemName}`);
-    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
+    window.open(`${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${message}`, '_blank');
   };
 
   const scrollToCategory = (cat: string) => {

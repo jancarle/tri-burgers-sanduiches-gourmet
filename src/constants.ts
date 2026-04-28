@@ -38,6 +38,11 @@ export const BUTTON_TEXTS = {
   whatsapp: "GARANTIR MEU BURGER NO WHATSAPP"
 };
 
+export const WHATSAPP_CONFIG = {
+  number: '5562991778064',
+  baseUrl: 'https://api.whatsapp.com/send'
+};
+
 export const SOCIAL_PROOF = [
   {
     name: "Sara Eduarda",
