@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/gemini/generate-post",
+      "destination": "/api/gemini/generate-post.ts"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/server.ts"
+    },
+    {
+      "source": "/share/(.*)",
+      "destination": "/api/server.ts"
+    },
+    {
+      "source": "/(admin|agency|master-admin)(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api|assets|favicon.ico|manifest.json).*)$",
+      "destination": "/index.html"
+    }
+  ]
+}

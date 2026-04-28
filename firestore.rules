@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'Marketingjan@gmail.com' ||
+        request.auth.token.email == 'marketingjan@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
+
+    // Validation Blueprint for MenuItem
+    function isValidMenuItem(data) {
+      return data.keys().hasAll(['name', 'price', 'category']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.price is number && data.price >= 0 &&
+             data.category is string && data.category.size() > 0 &&
+             (data.keys().hasAny(['description']) == false || data.description is string) &&
+             (data.keys().hasAny(['image']) == false || data.image is string) &&
+             (data.keys().hasAny(['highlight']) == false || data.highlight is bool) &&
+             (data.keys().hasAny(['priceText']) == false || data.priceText is string) &&
+             (data.keys().hasAny(['meatOptions']) == false || data.meatOptions is list) &&
+             (data.keys().hasAny(['updatedAt']) == false || data.updatedAt is timestamp);
+    }
+
+    // Match Admins
+    match /admins/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      // Nobody can write unless through admin SDK
+    }
+
+    // Match Settings (Like the Kill Switch)
+    match /settings/{settingId} {
+      // Anyone can read settings (needed for kill switch)
+      allow read: if true;
+      allow list: if true;
+      
+      // Only admins can change settings
+      allow write: if isAdmin();
+    }
+
+    // Match Menu Items
+    match /menu/{itemId} {
+      // Anyone can read the menu since it's a public landing page
+      allow read: if true;
+      allow list: if true;
+
+      // Only Admins can modify the menu
+      allow create: if isAdmin() && isValidId(itemId) && isValidMenuItem(incoming());
+      
+      allow update: if isAdmin() && isValidMenuItem(incoming());
+      
+      allow delete: if isAdmin();
+    }
+    // Match Orders
+    match /orders/{orderId} {
+      // Anyone can create an order (public checkout)
+      allow create: if true;
+      
+      // Only admins can read, list, update or delete orders
+      allow get, list, update, delete: if isAdmin();
+    }
+
+    // Match Push Tokens
+    match /push_tokens/{tokenId} {
+      // Anyone can save their push token
+      allow create, update: if true;
+      
+      // Only admins can read tokens to send messages
+      allow get, list, delete: if isAdmin();
+    }
+  }
+}

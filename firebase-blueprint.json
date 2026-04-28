@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "A food or drink item in the menu",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "highlight": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "price", "category", "image"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrator of the system",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "/menu/{itemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Publicly readable menu items. Only writeable by admins."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "List of admin users by UID."
+    }
+  }
+}
