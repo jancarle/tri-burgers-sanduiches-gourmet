@@ -136,11 +136,15 @@ app.get("/share/:productId", async (req, res) => {
     <meta property="og:title" content="${productData.name}">
     <meta property="og:description" content="${productData.description}">
     <meta property="og:image" content="${productData.image}">
+    <meta property="og:image:url" content="${productData.image}">
     <meta property="og:image:secure_url" content="${productData.image}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="${productData.name}">
     <meta property="og:site_name" content="Cardápio Digital">
+    <meta itemprop="name" content="${productData.name}">
+    <meta itemprop="description" content="${productData.description}">
+    <meta itemprop="image" content="${productData.image}">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">

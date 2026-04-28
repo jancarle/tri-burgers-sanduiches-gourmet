@@ -181,18 +181,18 @@ async function startServer() {
       Crie um post de marketing IRRESISTÍVEL para WhatsApp e Instagram.
       Foque em DESEJO e FOMO (medo de ficar de fora).
       
-      DADOS DO PRODUTO:
-      Nome: ${product.name}
-      Ingredientes: ${product.description}
-      Preço: ${product.price}
+      DADOS DO PRODUTO (USE ESTES DADOS):
+      Nome do Produto: ${product.name}
+      Ingredientes/Descrição: ${product.description}
+      Preço de Venda: ${product.price}
       Categoria: ${product.category}
       
       ESTRUTURA OBRIGATÓRIA (Siga exatamente):
-      1. TÍTULO DE IMPACTO: Comece com um título em CAPS LOCK que desperte a fome/curiosidade + 1 emoji.
+      1. TÍTULO DE IMPACTO: Mencione obrigatoriamente o nome do produto em CAPS LOCK + 1 emoji. (Ex: O MELHOR ${product.name.toUpperCase()} QUE VOCÊ VAI VER HOJE! 😍)
       
-      2. CORPO DO TEXTO (Storytelling): 2 a 3 parágrafos curtos no tom "Amigo indicando a melhor comida da vida". Use *negrito* nas palavras chave.
+      2. CORPO DO TEXTO (Storytelling): 2 a 3 parágrafos curtos. Fale sobre como o *${product.name}* é suculento e imperdível.
       
-      3. LISTA DE DELÍCIAS: Liste os principais ingredientes de forma organizada usando o emoji ✅ como marcador.
+      3. LISTA DE DELÍCIAS: Liste os ingredientes do ${product.name} usando o emoji ✅.
       
       4. PREÇO DESTACADO: Coloque o preço em uma linha isolada de forma chamativa.
       
