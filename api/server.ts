@@ -1,7 +1,18 @@
 import express from "express";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
+
+// Backup de dados para quando o Firestore falhar ou para respostas instantâneas
+const MENU_ITEMS_BACKUP = [
+  { id: 'g1', name: 'Burger Gourmet', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&q=80&w=1000' },
+  { id: 'g2', name: 'Clássico', image: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?auto=format&fit=crop&q=80&w=800' },
+  { id: 'g3', name: 'Premium', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=800' },
+  { id: 'g4', name: 'Premium Duplo', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&q=80&w=800' },
+  { id: 'g4_trip', name: 'Premium Triplo', image: 'https://images.unsplash.com/photo-1608767221051-2b9d18f35a1f?auto=format&fit=crop&q=80&w=800' },
+  { id: 'combo-promocional-xtudao', name: 'Combo X-Tudão Duplo', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=800' }
+];
 
 dotenv.config();
 
@@ -43,6 +54,8 @@ try {
   adminInitialized = false;
 }
 
+const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
+
 // Rota para metadados dinâmicos (Open Graph)
 app.get("/share/:productId", async (req, res) => {
   const { productId } = req.params;
@@ -50,66 +63,55 @@ app.get("/share/:productId", async (req, res) => {
   const host = req.get('host');
   const baseUrl = `${protocol}://${host}`;
   
+  // Tenta encontrar nos backups primeiro para resposta imediata
+  const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);
+
   let productData = {
-    name: "Delícia da Lanchonete",
-    description: "Confira nosso cardápio completo!",
-    image: "https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&q=80&w=1000"
+    name: backupProduct?.name || "Delícia da Lanchonete",
+    description: "Confira nosso cardápio completo e peça agora o melhor burger de Goiânia!",
+    image: backupProduct?.image || "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1200&h=630"
   };
+
+  let foundInDB = false;
 
   if (adminInitialized) {
     try {
+      console.log(`🔍 [Vercel OG] Buscando no DB ${DATABASE_ID}: ${productId}`);
       const cleanId = String(productId).trim();
-      console.log(`[OG_DEBUG] Iniciando busca para ID: "${cleanId}"`);
       
-      const firestore = admin.firestore();
-      const doc = await firestore.collection("menu").doc(cleanId).get();
+      // Busca no banco de dados específico utilizando getFirestore
+      const db = getFirestore(DATABASE_ID);
       
+      const docPromise = db.collection("menu").doc(cleanId).get();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500));
+      
+      const doc = await Promise.race([docPromise, timeoutPromise]) as admin.firestore.DocumentSnapshot;
+
       if (doc.exists) {
         const data = doc.data();
-        console.log(`[OG_DEBUG] Produto ENCONTRADO no Firestore: ${data?.name}`);
+        foundInDB = true;
+        console.log(`✅ [Vercel OG] Produto REAL encontrado: ${data?.name}`);
         
-        // Define o nome
+        // Atribui dados reais do banco
         productData.name = data?.name || productData.name;
         
-        // Define a imagem (prioridade para a do banco)
         if (data?.image && data.image.trim() !== "") {
-          productData.image = data.image;
-          console.log(`[OG_DEBUG] Usando imagem do banco: ${productData.image}`);
-        } else {
-          console.log(`[OG_DEBUG] Produto sem imagem no banco, usando fallback.`);
+          productData.image = data.image; // PRIORIDADE TOTAL À IMAGEM DO BANCO
         }
         
-        // Trata a descrição e preço
-        let finalDescription = data?.description || "";
-        let pricePrefix = "";
+        if (data?.description) {
+          productData.description = data.description.length > 150 ? `${data.description.substring(0, 147)}...` : data.description;
+        }
 
         if (data?.price) {
-          const numPrice = Number(data.price);
-          if (!isNaN(numPrice) && numPrice > 0) {
-            pricePrefix = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numPrice);
-          }
-        } else if (data?.meatOptions && Array.isArray(data.meatOptions) && data.meatOptions.length > 0) {
-          // Se for sanduíche tradicional com opções de carne, pega a primeira
-          const firstOption = data.meatOptions[0];
-          if (firstOption.price) {
-             pricePrefix = `A partir de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(firstOption.price)}`;
-          }
-        } else if (data?.priceText) {
-          pricePrefix = data.priceText;
-        }
-
-        if (pricePrefix) {
-          finalDescription = `${pricePrefix} - ${finalDescription}`;
-        }
-        
-        if (finalDescription) {
-          productData.description = finalDescription.length > 150 ? `${finalDescription.substring(0, 147)}...` : finalDescription;
+          const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.price);
+          productData.description = `${formattedPrice} - ${productData.description}`;
         }
       } else {
-        console.warn(`[OG_DEBUG] Documento NÃO existe no Firestore para ID: ${cleanId}. Verifique se o ID no banco é EXATAMENTE esse.`);
+        console.warn(`⚠️ [Vercel OG] ID ${cleanId} não encontrado no banco ${DATABASE_ID}.`);
       }
     } catch (err) {
-      console.error("[OG_DEBUG] Erro CRÍTICO ao buscar no Firestore:", err);
+      console.error("❌ [Vercel OG] Erro de conexão/busca:", err);
     }
   }
 
@@ -117,61 +119,91 @@ app.get("/share/:productId", async (req, res) => {
   if (productData.image && !productData.image.startsWith('http')) {
     const cleanImgPath = productData.image.startsWith('/') ? productData.image : `/${productData.image}`;
     productData.image = `${baseUrl}${cleanImgPath}`;
-    console.log(`[OG_DEBUG] URL da imagem convertida para absoluta: ${productData.image}`);
   }
 
+  const shareUrl = `${baseUrl}/share/${productId}`;
   const redirectUrl = `${baseUrl}/?p=${productId}`;
 
   res.send(`
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" prefix="og: http://ogp.me/ns#">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${productData.name}</title>
+    <title>${productData.name} | Tri Burgers</title>
     
-    <!-- Open Graph / WhatsApp / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="${redirectUrl}">
-    <meta property="og:title" content="${productData.name}">
-    <meta property="og:description" content="${productData.description}">
-    <meta property="og:image" content="${productData.image}">
-    <meta property="og:image:url" content="${productData.image}">
-    <meta property="og:image:secure_url" content="${productData.image}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="${productData.name}">
-    <meta property="og:site_name" content="Cardápio Digital">
-    <meta itemprop="name" content="${productData.name}">
-    <meta itemprop="description" content="${productData.description}">
-    <meta itemprop="image" content="${productData.image}">
+    <!-- Diagnóstico Silencioso -->
+    <!-- DB: ${foundInDB ? 'YES' : 'NO'} | ID: ${productId} | ADMIN: ${adminInitialized ? 'YES' : 'NO'} -->
 
+    <!-- Open Graph / Meta Tags Primárias para Redes Sociais -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${shareUrl}" />
+    <meta property="og:title" content="${productData.name}" />
+    <meta property="og:description" content="${productData.description}" />
+    <meta property="og:site_name" content="Tri Burgers Gourmet" />
+    
+    <!-- Imagem (O que o WhatsApp realmente usa) -->
+    <meta property="og:image" content="${productData.image}" />
+    <meta property="og:image:secure_url" content="${productData.image}" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${productData.name}" />
+    
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${productData.name}">
     <meta name="twitter:description" content="${productData.description}">
     <meta name="twitter:image" content="${productData.image}">
 
-    <!-- Redirecionamento Automático -->
-    <meta http-equiv="refresh" content="1;url=${redirectUrl}">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            text-align: center;
+        }
+        .loader {
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid #ef4444;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 900; text-transform: uppercase; }
+        p { color: #a1a1aa; }
+    </style>
+    
+    <!-- Redirecionamento planejado para respeitar o robô do WhatsApp -->
     <script>
-      setTimeout(function() {
-        window.location.href = "${redirectUrl}";
-      }, 500);
+        // Apenas redireciona se não for um rastro (crawler) de rede social
+        const isCrawler = /bot|googlebot|facebookexternalhit|whatsapp|telegram/i.test(navigator.userAgent);
+        if (!isCrawler) {
+            setTimeout(() => {
+                window.location.replace("${redirectUrl}");
+            }, 2500);
+        }
     </script>
+    
+    <!-- Fallback caso o JS falhe -->
+    <meta http-equiv="refresh" content="4;url=${redirectUrl}">
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff;">
-    <div style="text-align: center; padding: 20px;">
-        <div style="border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #ef4444; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; margin: 0 auto 30px;"></div>
-        <h1 style="font-size: 24px; font-weight: 900; margin-bottom: 10px; text-transform: uppercase; letter-spacing: -1px; font-style: italic;">${productData.name}</h1>
-        <p style="color: #a1a1aa; font-size: 14px; font-weight: 500;">Carregando sua delícia...</p>
-        
-        <!-- Oculto para usuários, visível para scrapers se necessário -->
-        <div style="display:none">
-          <img src="${productData.image}" alt="Preview">
-        </div>
-    </div>
-    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+<body>
+    <div class="loader"></div>
+    <h1>${productData.name}</h1>
+    <p>Estamos preparando sua experiência... Você será redirecionado em instantes.</p>
 </body>
 </html>
   `);
