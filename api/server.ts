@@ -130,6 +130,18 @@ app.get("/share/:productId", async (req, res) => {
   const shareUrl = `${baseUrl}/share/${productId}`;
   const redirectUrl = `${baseUrl}/?p=${productId}`;
 
+  // Detecção de Crawler no Servidor
+  const userAgent = req.headers['user-agent'] || "";
+  const isSocialCrawler = /facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|TelegramBot/i.test(userAgent);
+
+  // HTML condicional: Crawlers recebem APENAS os metadados. Humanos recebem o redirecionamento.
+  const redirectMeta = isSocialCrawler ? "" : `<meta http-equiv="refresh" content="3;url=${redirectUrl}">`;
+  const redirectScript = isSocialCrawler ? "" : `
+    <script>
+      window.location.replace("${redirectUrl}");
+    </script>
+  `;
+
   res.send(`
 <!DOCTYPE html>
 <html lang="pt-br" prefix="og: http://ogp.me/ns#">
@@ -139,7 +151,7 @@ app.get("/share/:productId", async (req, res) => {
     <title>${productData.name} | Tri Burgers</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
     
-    <!-- Diagnóstico: DB=${foundInDB?'YES':'NO'} ID=${productId} -->
+    <!-- Diagnóstico: DB=${foundInDB ? 'YES' : 'NO'} ID=${productId} Crawler=${isSocialCrawler ? 'YES' : 'NO'} -->
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
@@ -164,18 +176,13 @@ app.get("/share/:productId", async (req, res) => {
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
     
-    <script>
-        const isCrawler = /bot|googlebot|facebookexternalhit|whatsapp|telegram|facebot/i.test(navigator.userAgent);
-        if (!isCrawler) {
-            window.location.replace("${redirectUrl}");
-        }
-    </script>
-    <meta http-equiv="refresh" content="3;url=${redirectUrl}">
+    ${redirectScript}
+    ${redirectMeta}
 </head>
 <body>
     <div class="loader"></div>
     <h1>${productData.name}</h1>
-    <p>Redirecionando...</p>
+    <p>${isSocialCrawler ? 'Visualizando metadados...' : 'Redirecionando...'}</p>
 </body>
 </html>
   `);
