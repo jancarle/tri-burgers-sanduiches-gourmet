@@ -2,11 +2,19 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/robots.txt",
+      "destination": "/robots.txt"
+    },
+    {
       "source": "/api/gemini/generate-post",
       "destination": "/api/gemini/generate-post.ts"
     },
     {
       "source": "/api/health",
+      "destination": "/api/server.ts"
+    },
+    {
+      "source": "/share/:productId",
       "destination": "/api/server.ts"
     },
     {

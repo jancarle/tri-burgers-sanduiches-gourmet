@@ -58,9 +58,15 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 
 // Rota para metadados dinâmicos (Open Graph)
 app.get("/share/:productId", async (req, res) => {
+  // Configuração explícita para evitar 403 por falta de contexto em crawlers
+  res.status(200);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('X-Robots-Tag', 'all');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+
   const { productId } = req.params;
   const protocol = req.headers['x-forwarded-proto'] || "https";
-  const host = req.get('host');
+  const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
   const baseUrl = `${protocol}://${host}`;
   
   // Tenta encontrar nos backups primeiro para resposta imediata
@@ -83,20 +89,19 @@ app.get("/share/:productId", async (req, res) => {
       const db = getFirestore(DATABASE_ID);
       
       const docPromise = db.collection("menu").doc(cleanId).get();
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500));
+      // Temporizador agressivo para redes sociais (não podem esperar)
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
       
       const doc = await Promise.race([docPromise, timeoutPromise]) as admin.firestore.DocumentSnapshot;
 
       if (doc.exists) {
         const data = doc.data();
         foundInDB = true;
-        console.log(`✅ [Vercel OG] Produto REAL encontrado: ${data?.name}`);
         
-        // Atribui dados reais do banco
         productData.name = data?.name || productData.name;
         
         if (data?.image && data.image.trim() !== "") {
-          productData.image = data.image; // PRIORIDADE TOTAL À IMAGEM DO BANCO
+          productData.image = data.image;
         }
         
         if (data?.description) {
@@ -107,18 +112,19 @@ app.get("/share/:productId", async (req, res) => {
           const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.price);
           productData.description = `${formattedPrice} - ${productData.description}`;
         }
-      } else {
-        console.warn(`⚠️ [Vercel OG] ID ${cleanId} não encontrado no banco ${DATABASE_ID}.`);
       }
     } catch (err) {
-      console.error("❌ [Vercel OG] Erro de conexão/busca:", err);
+      console.error("❌ [Vercel OG] Fallback para backup devido a erro:", err);
     }
   }
 
-  // Garantir que a URL da imagem seja ABSOLUTA (O WhatsApp exige)
-  if (productData.image && !productData.image.startsWith('http')) {
-    const cleanImgPath = productData.image.startsWith('/') ? productData.image : `/${productData.image}`;
-    productData.image = `${baseUrl}${cleanImgPath}`;
+  // Garantir imagem absoluta e segura (HTTPS)
+  if (productData.image) {
+    if (!productData.image.startsWith('http')) {
+      const cleanImgPath = productData.image.startsWith('/') ? productData.image : `/${productData.image}`;
+      productData.image = `${baseUrl}${cleanImgPath}`;
+    }
+    productData.image = productData.image.replace("http://", "https://");
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
@@ -131,79 +137,45 @@ app.get("/share/:productId", async (req, res) => {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${productData.name} | Tri Burgers</title>
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     
-    <!-- Diagnóstico Silencioso -->
-    <!-- DB: ${foundInDB ? 'YES' : 'NO'} | ID: ${productId} | ADMIN: ${adminInitialized ? 'YES' : 'NO'} -->
+    <!-- Diagnóstico: DB=${foundInDB?'YES':'NO'} ID=${productId} -->
 
-    <!-- Open Graph / Meta Tags Primárias para Redes Sociais -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
     <meta property="og:title" content="${productData.name}" />
     <meta property="og:description" content="${productData.description}" />
     <meta property="og:site_name" content="Tri Burgers Gourmet" />
     
-    <!-- Imagem (O que o WhatsApp realmente usa) -->
     <meta property="og:image" content="${productData.image}" />
     <meta property="og:image:secure_url" content="${productData.image}" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="${productData.name}" />
     
-    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${productData.name}">
     <meta name="twitter:description" content="${productData.description}">
     <meta name="twitter:image" content="${productData.image}">
 
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #000;
-            color: #fff;
-            text-align: center;
-        }
-        .loader {
-            border: 4px solid rgba(255,255,255,0.1);
-            border-top: 4px solid #ef4444;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 900; text-transform: uppercase; }
-        p { color: #a1a1aa; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff; }
+        .loader { border: 4px solid #333; border-top: 4px solid #ef4444; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
     
-    <!-- Redirecionamento planejado para respeitar o robô do WhatsApp -->
     <script>
-        // Apenas redireciona se não for um rastro (crawler) de rede social
-        const isCrawler = /bot|googlebot|facebookexternalhit|whatsapp|telegram/i.test(navigator.userAgent);
+        const isCrawler = /bot|googlebot|facebookexternalhit|whatsapp|telegram|facebot/i.test(navigator.userAgent);
         if (!isCrawler) {
-            setTimeout(() => {
-                window.location.replace("${redirectUrl}");
-            }, 2500);
+            window.location.replace("${redirectUrl}");
         }
     </script>
-    
-    <!-- Fallback caso o JS falhe -->
-    <meta http-equiv="refresh" content="4;url=${redirectUrl}">
+    <meta http-equiv="refresh" content="3;url=${redirectUrl}">
 </head>
 <body>
     <div class="loader"></div>
     <h1>${productData.name}</h1>
-    <p>Estamos preparando sua experiência... Você será redirecionado em instantes.</p>
+    <p>Redirecionando...</p>
 </body>
 </html>
   `);
