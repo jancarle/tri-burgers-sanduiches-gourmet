@@ -375,7 +375,9 @@ export default function AdminPanel() {
               </div>
               <div className="hidden md:block text-right">
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter block">Status do Recurso</span>
-                <span className="text-xs text-green-500 font-black">BÔNUS GRATUITO ATIVO</span>
+                <span className={`text-xs font-black ${isPremium ? 'text-green-500' : 'text-red-500'}`}>
+                  {isPremium ? 'MKT VIRAL ATIVADO' : 'MKT VIRAL BLOQUEADO'}
+                </span>
               </div>
             </div>
 
@@ -407,188 +409,212 @@ export default function AdminPanel() {
                </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Product Selection */}
-              <div className="bg-zinc-800 border border-zinc-700 rounded-2xl p-6 shadow-xl">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                  <ChefHat size={18} className="text-zinc-400" /> 
-                  1. Escolha o Produto
-                </h3>
-                <div className="space-y-4">
-                  <select 
-                    value={selectedProductId}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500"
-                  >
-                    <option value="">Selecione um item do cardápio...</option>
-                    {items.map(item => (
-                      <option key={item.id} value={item.id}>{item.name} - R$ {item.price}</option>
-                    ))}
-                  </select>
+            {!isPremium && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-8 text-center space-y-4">
+                <Lock size={48} className="mx-auto text-red-500" />
+                <h3 className="text-xl font-bold">Marketing Viral Bloqueado</h3>
+                <p className="text-zinc-400 max-w-md mx-auto">
+                  Este recurso faz parte do módulo premium. Entre em contato com a agência para liberar o acesso e gerar posts irresistíveis.
+                </p>
+                <button 
+                   onClick={() => window.open('https://wa.me/5562991778064?text=Olá!%20Gostaria%20de%20pedir%20atualização%20do%20plano%20e%20a%20liberação%20do%20recurso%20de%20Marketing%20Viral', '_blank')}
+                   className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg transition-all"
+                >
+                  Falar com Suporte
+                </button>
+              </div>
+            )}
 
-                  {selectedProductId && (
-                    <div className="p-3 bg-zinc-950 border border-zinc-700 rounded-xl">
-                      <p className="text-[10px] text-zinc-500 font-black uppercase mb-1 flex items-center gap-2">
-                        <Share2 size={10} /> Link do Produto (Pronto para Uso)
+            {isPremium && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Product Selection */}
+                <div className="bg-zinc-800 border border-zinc-700 rounded-2xl p-6 shadow-xl">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                    <ChefHat size={18} className="text-zinc-400" /> 
+                    1. Escolha o Produto
+                  </h3>
+                  <div className="space-y-4">
+                    <select 
+                      value={selectedProductId}
+                      onChange={(e) => setSelectedProductId(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500"
+                    >
+                      <option value="">Selecione um item do cardápio...</option>
+                      {items.map(item => (
+                        <option key={item.id} value={item.id}>{item.name} - R$ {item.price}</option>
+                      ))}
+                    </select>
+
+                    {selectedProductId && (
+                      <div className="p-3 bg-zinc-950 border border-zinc-700 rounded-xl">
+                        <p className="text-[10px] text-zinc-500 font-black uppercase mb-1 flex items-center gap-2">
+                          <Share2 size={10} /> Link do Produto (Pronto para Uso)
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs text-orange-500 flex-1 truncate">{window.location.origin}/share/{selectedProductId}</code>
+                          <button 
+                            onClick={() => {
+                              const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+                              const shareLink = `${baseUrl}/share/${selectedProductId}`;
+                              navigator.clipboard.writeText(shareLink);
+                              alert('Link do produto copiado!');
+                            }}
+                            className="bg-zinc-800 p-2 rounded-lg hover:bg-zinc-700 text-zinc-300 transition-colors"
+                            title="Copiar Link"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={async () => {
+                        const product = items.find(i => i.id === selectedProductId);
+                        if (!product) {
+                          alert('Selecione um produto primeiro!');
+                          return;
+                        }
+                        setIsGenerating(true);
+                        try {
+                          const post = await generateMarketingPost({
+                            id: product.id,
+                            name: product.name,
+                            description: product.description,
+                            price: product.priceText || `R$ ${product.price.toFixed(2)}`,
+                            category: product.category
+                          });
+                          setGeneratedPost(post || '');
+                        } catch (err: any) {
+                          console.error('IA Error:', err);
+                          alert(`Erro: ${err.message || err}`);
+                        } finally {
+                          setIsGenerating(false);
+                        }
+                      }}
+                      disabled={!selectedProductId || isGenerating}
+                      className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <RefreshCw size={20} className="animate-spin" /> Gerando Magia...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={20} /> Gerar Post Viral
+                        </>
+                      )}
+                    </button>
+                    
+                    <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                      <p className="text-xs text-orange-400 leading-relaxed font-medium">
+                        <AlertCircle size={14} className="inline mr-1 mb-0.5" />
+                        A IA lerá os ingredientes e o preço do produto para criar um texto altamente persuasivo focado em vendas rápidas no WhatsApp.
                       </p>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs text-orange-500 flex-1 truncate">{window.location.origin}/share/{selectedProductId}</code>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Generated Content */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative min-h-[300px] flex flex-col">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-zinc-800">
+                    <h3 className="font-bold text-sm uppercase tracking-widest text-zinc-500">Preview do Post</h3>
+                    <div className="flex gap-2">
+                      {generatedPost && (
                         <button 
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/share/${selectedProductId}`);
-                            alert('Link do produto copiado!');
+                            navigator.clipboard.writeText(generatedPost);
+                            alert('Texto copiado! Agora é só colar no WhatsApp.');
                           }}
-                          className="bg-zinc-800 p-2 rounded-lg hover:bg-zinc-700 text-zinc-300 transition-colors"
-                          title="Copiar Link"
+                          className="text-xs flex items-center gap-1.5 bg-green-500/10 text-green-500 hover:bg-green-500/20 px-3 py-1.5 rounded-lg transition-colors border border-green-500/20"
                         >
-                          <Copy size={14} />
+                          <Copy size={14} /> Copiar
                         </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Image Mockup for Marketing */}
+                  {(generatedPost || selectedProductId) && (
+                    <div className="mb-4 relative rounded-xl overflow-hidden aspect-video group border border-zinc-800 shadow-2xl bg-zinc-900">
+                      <img 
+                        src={items.find(i => i.id === selectedProductId)?.image || "https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&q=80&w=1000"}
+                        alt="Marketing Mockup"
+                        className="w-full h-full object-cover brightness-90 group-hover:scale-105 transition-transform duration-700"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-5">
+                          <div className="bg-orange-600 w-fit px-2 py-0.5 rounded text-[10px] font-black mb-1 uppercase tracking-tighter shadow-lg">PREVIEW SUGESTÃO</div>
+                          <h4 className="text-white font-black text-xl leading-tight uppercase italic drop-shadow-md">
+                            {items.find(i => i.id === selectedProductId)?.name || 'Delícia do Dia'}
+                          </h4>
+                          <p className="text-zinc-300 text-[10px] font-bold">Dica: O link abaixo ativará a prévia automática no WhatsApp!</p>
                       </div>
                     </div>
                   )}
 
-                  <button 
-                    onClick={async () => {
-                      const product = items.find(i => i.id === selectedProductId);
-                      if (!product) {
-                        alert('Selecione um produto primeiro!');
-                        return;
-                      }
-                      setIsGenerating(true);
-                      try {
-                        const post = await generateMarketingPost({
-                          id: product.id,
-                          name: product.name,
-                          description: product.description,
-                          price: product.priceText || `R$ ${product.price.toFixed(2)}`,
-                          category: product.category
-                        });
-                        setGeneratedPost(post || '');
-                      } catch (err: any) {
-                        console.error('IA Error:', err);
-                        alert(`Erro: ${err.message || err}`);
-                      } finally {
-                        setIsGenerating(false);
-                      }
-                    }}
-                    disabled={!selectedProductId || isGenerating}
-                    className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <RefreshCw size={20} className="animate-spin" /> Gerando Magia...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={20} /> Gerar Post Viral
-                      </>
-                    )}
-                  </button>
-                  
-                  <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                    <p className="text-xs text-orange-400 leading-relaxed font-medium">
-                      <AlertCircle size={14} className="inline mr-1 mb-0.5" />
-                      A IA lerá os ingredientes e o preço do produto para criar um texto altamente persuasivo focado em vendas rápidas no WhatsApp.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Generated Content */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative min-h-[300px] flex flex-col">
-                <div className="flex justify-between items-center mb-4 pb-2 border-b border-zinc-800">
-                  <h3 className="font-bold text-sm uppercase tracking-widest text-zinc-500">Preview do Post</h3>
-                  <div className="flex gap-2">
-                    {generatedPost && (
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(generatedPost);
-                          alert('Texto copiado! Agora é só colar no WhatsApp.');
-                        }}
-                        className="text-xs flex items-center gap-1.5 bg-green-500/10 text-green-500 hover:bg-green-500/20 px-3 py-1.5 rounded-lg transition-colors border border-green-500/20"
-                      >
-                        <Copy size={14} /> Copiar
-                      </button>
+                  <div className={`flex-1 whitespace-pre-wrap text-sm font-medium leading-relaxed font-sans p-5 rounded-xl border shadow-inner ${generatedPost.startsWith('⚠️') ? 'bg-red-500/5 border-red-500/20 text-red-200' : 'bg-zinc-950 border-zinc-800 text-zinc-200'}`}>
+                    {generatedPost || (
+                      <div className="h-full flex flex-col items-center justify-center text-zinc-600 italic">
+                        <MessageCircle size={40} className="mb-4 opacity-20" />
+                        {selectedProductId ? "O link de compartilhamento já está pronto! Clique em 'Gerar Post Viral' para criar um texto incrível." : "O post gerado aparecerá aqui..."}
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {/* Image Mockup for Marketing */}
-                {(generatedPost || selectedProductId) && (
-                  <div className="mb-4 relative rounded-xl overflow-hidden aspect-video group border border-zinc-800 shadow-2xl bg-zinc-900">
-                     <img 
-                       src={items.find(i => i.id === selectedProductId)?.image || "https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&q=80&w=1000"}
-                       alt="Marketing Mockup"
-                       className="w-full h-full object-cover brightness-90 group-hover:scale-105 transition-transform duration-700"
-                       referrerPolicy="no-referrer"
-                       onError={(e) => {
-                         (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
-                       }}
-                     />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-5">
-                        <div className="bg-orange-600 w-fit px-2 py-0.5 rounded text-[10px] font-black mb-1 uppercase tracking-tighter shadow-lg">PREVIEW SUGESTÃO</div>
-                        <h4 className="text-white font-black text-xl leading-tight uppercase italic drop-shadow-md">
-                          {items.find(i => i.id === selectedProductId)?.name || 'Delícia do Dia'}
-                        </h4>
-                        <p className="text-zinc-300 text-[10px] font-bold">Dica: O link abaixo ativará a prévia automática no WhatsApp!</p>
-                     </div>
-                  </div>
-                )}
+                  {selectedProductId && (
+                    <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          onClick={() => {
+                            const product = items.find(i => i.id === selectedProductId);
+                            const isError = generatedPost.startsWith('⚠️');
+                            const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+                            const shareLink = `${baseUrl}/share/${selectedProductId}`;
+                            const textToCopy = isError || !generatedPost 
+                              ? `🍔 *${product?.name || 'Delícia do Dia'}*\n\nConfira nosso cardápio e faça seu pedido pelo link:\n\n${shareLink}`
+                              : generatedPost;
+                              
+                            navigator.clipboard.writeText(textToCopy);
+                            alert('Texto copiado!');
+                          }}
+                          className="bg-zinc-100 hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 px-2"
+                        >
+                          <Copy size={20} /> Copiar Texto
+                        </button>
 
-                <div className={`flex-1 whitespace-pre-wrap text-sm font-medium leading-relaxed font-sans p-5 rounded-xl border shadow-inner ${generatedPost.startsWith('⚠️') ? 'bg-red-500/5 border-red-500/20 text-red-200' : 'bg-zinc-950 border-zinc-800 text-zinc-200'}`}>
-                  {generatedPost || (
-                    <div className="h-full flex flex-col items-center justify-center text-zinc-600 italic">
-                      <MessageCircle size={40} className="mb-4 opacity-20" />
-                      {selectedProductId ? "O link de compartilhamento já está pronto! Clique em 'Gerar Post Viral' para criar um texto incrível." : "O post gerado aparecerá aqui..."}
+                        <button 
+                          onClick={() => {
+                            const product = items.find(i => i.id === selectedProductId);
+                            const isError = generatedPost.startsWith('⚠️');
+                            const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+                            const shareLink = `${baseUrl}/share/${selectedProductId}`;
+                            const textToShare = isError || !generatedPost 
+                              ? `🍔 *${product?.name || 'Delícia do Dia'}*\n\nConfira nosso cardápio e faça seu pedido pelo link:\n\n${shareLink}`
+                              : generatedPost;
+
+                            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textToShare)}`, '_blank');
+                          }}
+                          className="bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 px-2"
+                        >
+                          <MessageCircle size={20} /> Direto p/ Zap
+                        </button>
+                      </div>
+                      
+                      <div className="bg-orange-500/10 border border-orange-500/20 p-3 rounded-lg">
+                        <p className="text-[10px] text-orange-400 text-center font-bold uppercase tracking-wider">
+                          Importante: O WhatsApp não permite enviar a FOTO e o TEXTO juntos por link. 
+                          Envie o texto, e o link de compartilhamento puxará a foto automaticamente!
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {selectedProductId && (
-                  <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        onClick={() => {
-                          const product = items.find(i => i.id === selectedProductId);
-                          const isError = generatedPost.startsWith('⚠️');
-                          const textToCopy = isError || !generatedPost 
-                            ? `🍔 *${product?.name || 'Delícia do Dia'}*\n\nConfira nosso cardápio e faça seu pedido pelo link:\n\n${window.location.origin}/share/${selectedProductId}`
-                            : generatedPost;
-                            
-                          navigator.clipboard.writeText(textToCopy);
-                          alert('Texto copiado!');
-                        }}
-                        className="bg-zinc-100 hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 px-2"
-                      >
-                        <Copy size={20} /> Copiar Texto
-                      </button>
-
-                      <button 
-                        onClick={() => {
-                          const product = items.find(i => i.id === selectedProductId);
-                          const isError = generatedPost.startsWith('⚠️');
-                          const textToShare = isError || !generatedPost 
-                            ? `🍔 *${product?.name || 'Delícia do Dia'}*\n\nConfira nosso cardápio e faça seu pedido pelo link:\n\n${window.location.origin}/share/${selectedProductId}`
-                            : generatedPost;
-
-                          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textToShare)}`, '_blank');
-                        }}
-                        className="bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 px-2"
-                      >
-                        <MessageCircle size={20} /> Direto p/ Zap
-                      </button>
-                    </div>
-                    
-                    <div className="bg-orange-500/10 border border-orange-500/20 p-3 rounded-lg">
-                      <p className="text-[10px] text-orange-400 text-center font-bold uppercase tracking-wider">
-                         Importante: O WhatsApp não permite enviar a FOTO e o TEXTO juntos por link. 
-                         Envie o texto, e o link de compartilhamento puxará a foto automaticamente!
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -920,14 +946,15 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
               )}
               <button 
                   onClick={() => {
-                    const shareLink = `${window.location.origin}/share/${item.id}`;
+                    const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+                    const shareLink = `${baseUrl}/share/${item.id}`;
                     navigator.clipboard.writeText(shareLink);
                     alert('Link de compartilhamento copiado!');
                   }}
-                  title="Copiar Link (WhatsApp)"
+                  title="Copiar Link para Divulgação"
                   className="flex items-center gap-1.5 text-xs text-green-500 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/20 hover:bg-green-500/20 transition-colors ml-auto"
                 >
-                  <Share2 className="w-3.5 h-3.5" /> <span className="font-bold">WhatsApp</span>
+                  <Share2 className="w-3.5 h-3.5" /> <span className="font-bold">Compartilhar</span>
                 </button>
             </div>
           </>

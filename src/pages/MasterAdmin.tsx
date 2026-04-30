@@ -109,7 +109,7 @@ export default function MasterAdmin() {
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                 <div className="flex items-center gap-3 text-zinc-400 mb-2">
                     <Smartphone size={18} />
-                    <span className="text-sm font-bold uppercase tracking-widest">Lojas com Push</span>
+                    <span className="text-sm font-bold uppercase tracking-widest">Marketing Viral Ativo</span>
                 </div>
                 <p className="text-3xl font-black text-white">{isPremium ? '1' : '0'}</p>
             </div>
@@ -140,7 +140,7 @@ export default function MasterAdmin() {
                   <th className="p-4 font-bold border-b border-zinc-800">Domínio / Link</th>
                   <th className="p-4 font-bold border-b border-zinc-800 text-center">Vencimento</th>
                   <th className="p-4 font-bold border-b border-zinc-800 text-center">Status Acesso</th>
-                  <th className="p-4 font-bold border-b border-zinc-800 text-center">Módulo Push</th>
+                  <th className="p-4 font-bold border-b border-zinc-800 text-center">Marketing Viral</th>
                 </tr>
               </thead>
               <tbody>
@@ -187,15 +187,15 @@ export default function MasterAdmin() {
                         onClick={togglePremium}
                         className={`flex items-center gap-2 px-4 py-2 mx-auto rounded-lg text-xs font-bold transition-colors border ${
                             isPremium 
-                            ? 'bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-lg shadow-blue-900/50' 
+                            ? 'bg-orange-600 text-white border-orange-500 hover:bg-orange-700 shadow-lg shadow-orange-900/50' 
                             : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white hover:border-zinc-500'
                         }`}
                     >
                         {isPremium ? <Check size={14} /> : <Lock size={14} />}
-                        {isPremium ? 'Push Ativado' : 'Ativar Push'}
+                        {isPremium ? 'Viral Ativado' : 'Ativar Viral'}
                     </button>
                     <p className="text-[10px] text-zinc-600 mt-1 uppercase tracking-widest hidden md:block">
-                        {isPremium ? 'Módulo Premium Liberado' : 'Módulo Básico'}
+                        {isPremium ? 'Recurso Liberado' : 'Recurso Bloqueado'}
                     </p>
                   </td>
                 </tr>
