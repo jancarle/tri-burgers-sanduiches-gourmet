@@ -58,17 +58,35 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 
 // Rota para metadados dinâmicos (Open Graph)
 app.get("/share/:productId", async (req, res) => {
-  // Configuração explícita para evitar 403 por falta de contexto em crawlers
+  const { productId } = req.params;
+  const userAgent = String(req.headers["user-agent"] || "");
+  const redirectUrl = `/?p=${productId}`;
+
+  // Detecção de Crawler Social específica
+  const isSocialCrawler =
+    /facebookexternalhit/i.test(userAgent) ||
+    /facebot/i.test(userAgent) ||
+    /whatsapp/i.test(userAgent) ||
+    /twitterbot/i.test(userAgent) ||
+    /linkedinbot/i.test(userAgent) ||
+    /telegrambot/i.test(userAgent);
+
+  // Redirecionamento imediato para humanos (Servidor)
+  if (!isSocialCrawler) {
+    res.setHeader('Vary', 'User-Agent');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.redirect(302, redirectUrl);
+  }
+
+  // Configuração para Crawlers
   res.status(200);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Robots-Tag', 'all');
   res.setHeader('Vary', 'User-Agent');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-  const { productId } = req.params;
-  const protocol = req.headers['x-forwarded-proto'] || "https";
   const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = `https://${host}`;
   
   // Tenta encontrar nos backups primeiro para resposta imediata
   const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);
@@ -101,8 +119,8 @@ app.get("/share/:productId", async (req, res) => {
         
         productData.name = data?.name || productData.name;
         
-        if (data?.image && data.image.trim() !== "") {
-          productData.image = data.image;
+        if (data?.image && typeof data.image === 'string' && data.image.trim() !== "") {
+          productData.image = data.image.trim();
         }
         
         if (data?.description) {
@@ -119,74 +137,44 @@ app.get("/share/:productId", async (req, res) => {
     }
   }
 
-  // Garantir imagem absoluta e segura (HTTPS)
-  if (productData.image) {
-    if (!productData.image.startsWith('http')) {
-      const cleanImgPath = productData.image.startsWith('/') ? productData.image : `/${productData.image}`;
-      productData.image = `${baseUrl}${cleanImgPath}`;
+  // Garantir imagem absoluta e segura (HTTPS) para WhatsApp/Facebook
+  if (productData.image && typeof productData.image === 'string') {
+    let imgUrl = productData.image;
+    if (!imgUrl.startsWith('http')) {
+      const cleanImgPath = imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`;
+      imgUrl = `${baseUrl}${cleanImgPath}`;
     }
-    productData.image = productData.image.replace("http://", "https://");
+    // Forçar HTTPS
+    if (imgUrl.startsWith('http://')) {
+      imgUrl = imgUrl.replace('http://', 'https://');
+    }
+    productData.image = imgUrl;
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
-  const userAgent = String(req.headers["user-agent"] || "");
 
-  const isSocialCrawler =
-    /facebookexternalhit/i.test(userAgent) ||
-    /facebot/i.test(userAgent) ||
-    /twitterbot/i.test(userAgent) ||
-    /linkedinbot/i.test(userAgent) ||
-    /telegrambot/i.test(userAgent) ||
-    /whatsapp/i.test(userAgent);
-
-  const redirectUrl = `/?p=${productId}`;
-
-  res.send(`
-<!DOCTYPE html>
+  res.send(`<!DOCTYPE html>
 <html lang="pt-br" prefix="og: http://ogp.me/ns#">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${productData.name} | Tri Burgers</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
-    
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
     <meta property="og:title" content="${productData.name}" />
     <meta property="og:description" content="${productData.description}" />
-    <meta property="og:site_name" content="Tri Burgers Gourmet" />
-    
+    <meta property="og:site_name" content="Tri Burgers" />
     <meta property="og:image" content="${productData.image}" />
     <meta property="og:image:secure_url" content="${productData.image}" />
-    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="${productData.name}">
-    <meta name="twitter:description" content="${productData.description}">
     <meta name="twitter:image" content="${productData.image}">
-
-    <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff; padding: 20px; box-sizing: border-box; }
-        .card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 30px; max-width: 400px; width: 100%; text-align: center; }
-        .product-img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; }
-        h1 { font-size: 1.5rem; margin: 0 0 10px; color: #fff; }
-        p { color: #888; font-size: 0.9rem; margin-bottom: 25px; line-height: 1.4; }
-        .btn { background: #ef4444; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; transition: background 0.2s; display: inline-block; }
-        .btn:hover { background: #dc2626; }
-    </style>
 </head>
-<body>
-    <div class="card">
-        <img src="${productData.image}" alt="${productData.name}" class="product-img">
-        <h1>${productData.name}</h1>
-        <p>${productData.description}</p>
-        <a href="${redirectUrl}" class="btn">Abrir cardápio</a>
-    </div>
+<body style="background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <p>Processando link...</p>
 </body>
-</html>
-  `);
+</html>`);
 });
 
   // Rota de diagnóstico
