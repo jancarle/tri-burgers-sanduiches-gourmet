@@ -86,7 +86,7 @@ app.get("/share/:productId", async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
-  const baseUrl = `https://${host}`;
+  const baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || `https://${host}`;
   
   // Tenta encontrar nos backups primeiro para resposta imediata
   const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);

@@ -1,13 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../lib/firebase';
+import { auth, db, storage } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
 import { MenuItem } from '../types';
-import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2 } from 'lucide-react';
+import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generateMarketingPost } from '../services/geminiService';
+
+// Helper to normalize image URLs for WhatsApp compatibility
+const normalizeImageUrl = (url: string): string => {
+  if (!url) return "";
+  let normalized = url.trim();
+
+  // 1. Force HTTPS
+  if (normalized.startsWith("http://")) {
+    normalized = normalized.replace("http://", "https://");
+  }
+
+  // 2. Resolve relative paths to absolute
+  if (normalized.startsWith("/")) {
+    const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    normalized = `${baseUrl}${normalized}`;
+  }
+
+  return normalized;
+};
 
 export default function AdminPanel() {
   const [user, loading, error] = useAuthState(auth);
@@ -625,16 +645,50 @@ interface ProductCardProps {
 function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleSave = () => {
     const updatedItem = {
       ...draft,
-      price: Number(draft.price)
+      price: Number(draft.price),
+      image: normalizeImageUrl(draft.image || "")
     };
     
     onUpdate(updatedItem);
     setEditing(false);
   };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.match(/image\/(jpeg|jpg|png)/)) {
+      alert("Por favor, envie apenas imagens JPG ou PNG. O WhatsApp pode não exibir WebP corretamente.");
+      return;
+    }
+
+    if (!storage) {
+      alert("Firebase Storage não está configurado.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `products/${item.id}_${Date.now()}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      setDraft(prev => ({ ...prev, image: downloadURL }));
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Erro ao enviar imagem. Verifique suas permissões.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const isWebp = draft.image?.toLowerCase().includes(".webp");
+  const isNotHttps = draft.image && !draft.image.startsWith("https://");
+  const isRelative = draft.image?.startsWith("/");
 
   return (
     <div className="bg-zinc-800 rounded-xl overflow-hidden shadow border border-zinc-700/50">
@@ -665,7 +719,7 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
             <div>
               <label className="text-xs text-zinc-400">Nome do Produto</label>
               <input 
-                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white" 
+                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none" 
                 value={draft.name} onChange={e => setDraft({...draft, name: e.target.value})} 
               />
             </div>
@@ -675,7 +729,7 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
                 <label className="text-xs text-zinc-400">Preço Base (R$)</label>
                 <input 
                   type="number" step="0.01" 
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white" 
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none" 
                   value={draft.price} 
                   onChange={e => {
                     const newPrice = Number(e.target.value);
@@ -686,7 +740,7 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
               <div className="flex-1">
                 <label className="text-xs text-zinc-400">Categoria</label>
                 <select 
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none"
                   value={draft.category} onChange={e => setDraft({...draft, category: e.target.value})}
                 >
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -708,7 +762,6 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
                          onChange={e => {
                            const newOptions = [...draft.meatOptions!];
                            newOptions[i].price = Number(e.target.value);
-                           // Se for a primeira opção (mais barata), atualiza o texto geral e o preço base
                            if (i === 0) {
                              setDraft({...draft, meatOptions: newOptions, price: newOptions[0].price, priceText: `A partir de R$ ${newOptions[0].price.toFixed(2)}`});
                            } else {
@@ -724,9 +777,10 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
 
             {!draft.meatOptions && (
               <div>
-                <label className="text-xs text-zinc-400">Texto de Preço Alternativo (ex: "Consulte" ou "A partir de R$ 10")</label>
+                <label className="text-xs text-zinc-400">Texto de Preço Alternativo</label>
                 <input 
                   className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white" 
+                  placeholder='ex: "Consulte" ou "A partir de R$ 10"'
                   value={draft.priceText || ''} onChange={e => setDraft({...draft, priceText: e.target.value})} 
                 />
               </div>
@@ -735,69 +789,147 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
             <div>
               <label className="text-xs text-zinc-400">Descrição/Ingredientes</label>
               <textarea 
-                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white h-20" 
+                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white h-20 focus:border-red-500 focus:outline-none" 
                 value={draft.description} onChange={e => setDraft({...draft, description: e.target.value})}
               />
             </div>
 
-            <div>
-              <label className="text-xs text-zinc-400">URL da Imagem</label>
-              <input 
-                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white" 
-                value={draft.image || ''} onChange={e => setDraft({...draft, image: e.target.value})} 
-              />
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-zinc-400">Imagem do Produto</label>
+                {draft.image && (
+                  <div className="w-12 h-12 rounded border border-zinc-700 overflow-hidden bg-black">
+                    <img src={draft.image} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Section */}
+              <div className="flex gap-2">
+                <label className="flex-1 cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg p-2 hover:border-orange-500 transition-colors bg-zinc-900/30">
+                  <input type="file" className="hidden" onChange={handleFileUpload} accept="image/jpeg,image/png" disabled={isUploading} />
+                  {isUploading ? (
+                    <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                  ) : (
+                    <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-zinc-500">
+                      <Upload size={14} /> Enviar Imagem
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-500 uppercase font-black mb-1 block">URL Manual</label>
+                <input 
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none" 
+                  placeholder="https://site.com/foto.jpg"
+                  value={draft.image || ''} 
+                  onChange={e => setDraft({...draft, image: e.target.value})} 
+                  onBlur={e => setDraft({...draft, image: normalizeImageUrl(e.target.value)})}
+                />
+              </div>
+
+              {/* Warnings */}
+              <div className="space-y-1">
+                {isWebp && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
+                    <AlertCircle size={12} /> WebP pode não aparecer no WhatsApp. Use JPG ou PNG.
+                  </div>
+                )}
+                <div className="text-[10px] text-blue-400 font-bold bg-blue-500/5 p-2 rounded border border-blue-500/10 italic">
+                   Dica: Para aparecer corretamente no WhatsApp, use imagem JPG ou PNG com URL pública HTTPS.
+                </div>
+                {isNotHttps && draft.image && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-red-500 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">
+                    <Info size={12} /> A URL deve ser HTTPS segura.
+                  </div>
+                )}
+                {isRelative && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-orange-400 font-bold bg-orange-500/10 p-2 rounded border border-orange-500/20">
+                    <Info size={12} /> Esta imagem é local. Ela será convertida para URL absoluta ao salvar.
+                  </div>
+                )}
+              </div>
             </div>
             
-            <div className="flex justify-end gap-2 mt-2">
-              <button onClick={() => setEditing(false)} className="p-2 bg-zinc-700 rounded hover:bg-zinc-600"><X className="w-4 h-4" /></button>
-              <button onClick={handleSave} className="p-2 bg-green-600 rounded hover:bg-green-500"><Check className="w-4 h-4" /></button>
+            <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-zinc-700">
+              <button 
+                onClick={() => setEditing(false)} 
+                className="py-3 bg-zinc-700 rounded-xl hover:bg-zinc-600 font-bold flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" /> Cancelar
+              </button>
+              <button 
+                onClick={handleSave} 
+                className="py-3 bg-green-600 rounded-xl hover:bg-green-500 font-bold flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" /> Salvar Produto
+              </button>
             </div>
           </>
         ) : (
           <>
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-orange-500 font-medium px-2 py-1 bg-orange-500/10 rounded-full">
-                    {item.category}
-                  </span>
-                  {item.highlight && (
-                    <span className="text-[10px] uppercase font-bold tracking-widest bg-red-600/20 text-red-500 px-2 py-1 rounded-full border border-red-600/20">
-                      POP
-                    </span>
-                  )}
-                  {item.available === false && (
-                    <span className="text-[10px] uppercase font-bold tracking-widest bg-zinc-600/50 text-zinc-400 px-2 py-1 rounded-full border border-zinc-600/50">
-                      ESGOTADO
-                    </span>
-                  )}
-                </div>
-                <h3 className={`font-semibold text-lg ${item.available === false ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
-                  {item.name}
-                </h3>
-                <p className="text-zinc-300 font-bold mt-1">
-                  {item.priceText ? item.priceText : `R$ ${Number(item.price).toFixed(2).replace('.', ',')}`}
-                </p>
+            <div className="flex gap-4">
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700 flex-shrink-0">
+                <img 
+                  src={item.image || "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=200"} 
+                  alt={item.name} 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
+                  }}
+                />
               </div>
-              <div className="flex gap-1">
-                <button 
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-[10px] text-orange-500 font-black uppercase px-2 py-0.5 bg-orange-500/10 rounded border border-orange-500/10">
+                        {item.category}
+                      </span>
+                      {item.highlight && (
+                        <span className="text-[10px] uppercase font-bold tracking-widest bg-red-600 text-white px-2 py-0.5 rounded shadow-sm">
+                          POP
+                        </span>
+                      )}
+                      {item.available === false && (
+                        <span className="text-[10px] uppercase font-bold tracking-widest bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded border border-zinc-600">
+                          OFF
+                        </span>
+                      )}
+                    </div>
+                    <h3 className={`font-bold text-base truncate ${item.available === false ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                      {item.name}
+                    </h3>
+                    <p className="text-green-500 font-black text-sm">
+                      {item.priceText ? item.priceText : `R$ ${Number(item.price).toFixed(2).replace('.', ',')}`}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button onClick={() => setEditing(true)} className="p-2 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={onDelete} className="p-2 hover:bg-red-500/10 rounded-lg text-zinc-600 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-2 flex items-center justify-between">
+               {item.description && (
+                <p className="text-xs text-zinc-400 line-clamp-1 italic">{item.description}</p>
+              )}
+              <button 
                   onClick={() => {
                     const shareLink = `${window.location.origin}/share/${item.id}`;
                     navigator.clipboard.writeText(shareLink);
-                    alert('Link de compartilhamento copiado! Ao colar no Zap ele puxa a foto do burger automaticamente.');
+                    alert('Link de compartilhamento copiado!');
                   }}
-                  title="Copiar Link com Foto (WhatsApp)"
-                  className="p-2 hover:bg-zinc-700 rounded-lg text-green-500 hover:text-green-400 transition"
+                  title="Copiar Link (WhatsApp)"
+                  className="flex items-center gap-1.5 text-xs text-green-500 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/20 hover:bg-green-500/20 transition-colors ml-auto"
                 >
-                  <Share2 className="w-4 h-4" />
+                  <Share2 className="w-3.5 h-3.5" /> <span className="font-bold">WhatsApp</span>
                 </button>
-                <button onClick={() => setEditing(true)} className="p-2 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={onDelete} className="p-2 hover:bg-red-500/20 rounded-lg text-zinc-600 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
-              </div>
             </div>
-            {item.description && (
-              <p className="text-sm text-zinc-400 line-clamp-2">{item.description}</p>
-            )}
           </>
         )}
       </div>
