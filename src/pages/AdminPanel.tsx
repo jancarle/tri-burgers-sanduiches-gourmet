@@ -9,6 +9,7 @@ import { MenuItem } from '../types';
 import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generateMarketingPost } from '../services/geminiService';
+import { processImage } from '../lib/imageUtils';
 
 // Helper to normalize image URLs for WhatsApp compatibility
 const normalizeImageUrl = (url: string): string => {
@@ -688,8 +689,23 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.match(/image\/(jpeg|jpg|png)/)) {
-      alert("Por favor, envie apenas imagens JPG ou PNG. O WhatsApp pode não exibir WebP corretamente.");
+    // Validation: Only JPG, JPEG, PNG
+    const acceptedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const forbiddenExtensions = ['.webp', '.gif', '.svg'];
+    const fileNameLower = file.name.toLowerCase();
+    
+    if (!acceptedTypes.includes(file.type)) {
+      alert("Erro: Apenas imagens JPG ou PNG são permitidas.");
+      return;
+    }
+
+    if (forbiddenExtensions.some(ext => fileNameLower.endsWith(ext))) {
+       alert("Erro: Formatos WebP, GIF e SVG não são permitidos.");
+       return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Erro: A imagem deve ter no máximo 2 MB.");
       return;
     }
 
@@ -700,13 +716,25 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
 
     setIsUploading(true);
     try {
-      const storageRef = ref(storage, `products/${item.id}_${Date.now()}`);
-      const snapshot = await uploadBytes(storageRef, file);
+      // Process image: Resize to 1200px max width and compress to 0.85 JPG
+      const processedBlob = await processImage(file, { maxWidth: 1200, quality: 0.85 });
+      
+      // Upload to products/{productId}/main.jpg
+      const storageRef = ref(storage, `products/${item.id}/main.jpg`);
+      const snapshot = await uploadBytes(storageRef, processedBlob, {
+        contentType: 'image/jpeg'
+      });
+      
       const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      // Update draft image URL with the new cloud URL
+      // Use a cache buster if necessary, but Storage URLs usually include a token that changes
       setDraft(prev => ({ ...prev, image: downloadURL }));
-    } catch (err) {
+      
+      alert("Imagem enviada com sucesso!");
+    } catch (err: any) {
       console.error("Upload error:", err);
-      alert("Erro ao enviar imagem. Verifique suas permissões.");
+      alert(err.message || "Erro ao enviar imagem.");
     } finally {
       setIsUploading(false);
     }
@@ -857,14 +885,14 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
 
               {/* Warnings */}
               <div className="space-y-1">
+                <div className="text-[10px] text-orange-400 font-bold bg-orange-500/5 p-2 rounded border border-orange-500/10 italic">
+                   Aviso: Para aparecer corretamente no WhatsApp, use imagem JPG ou PNG em boa qualidade.
+                </div>
                 {isWebp && (
                   <div className="flex items-center gap-1.5 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
-                    <AlertCircle size={12} /> WebP pode não aparecer no WhatsApp. Use JPG ou PNG.
+                    <AlertCircle size={12} /> WebP detectado. Recomendamos trocar por JPG para melhor compatibilidade.
                   </div>
                 )}
-                <div className="text-[10px] text-blue-400 font-bold bg-blue-500/5 p-2 rounded border border-blue-500/10 italic">
-                   Dica: Para aparecer corretamente no WhatsApp, use imagem JPG ou PNG com URL pública HTTPS.
-                </div>
                 {isNotHttps && draft.image && (
                   <div className="flex items-center gap-1.5 text-[10px] text-red-500 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">
                     <Info size={12} /> A URL deve ser HTTPS segura.
