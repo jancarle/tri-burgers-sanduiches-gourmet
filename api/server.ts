@@ -128,8 +128,8 @@ app.get("/share/:productId", async (req, res) => {
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
-  // Detecção de Crawler Social específica recomendada pelo usuário
   const userAgent = String(req.headers["user-agent"] || "");
+
   const isSocialCrawler =
     /facebookexternalhit/i.test(userAgent) ||
     /facebot/i.test(userAgent) ||
@@ -138,18 +138,24 @@ app.get("/share/:productId", async (req, res) => {
     /telegrambot/i.test(userAgent) ||
     /whatsapp/i.test(userAgent);
 
-  console.log("SHARE_ROUTE_UA", userAgent, "IS_SOCIAL_CRAWLER", isSocialCrawler);
-
-  // URL de Redirecionamento Final para o App (página do produto)
   const redirectUrl = `/?p=${productId}`;
 
-  // Estrutura de redirecionamento exclusiva para humanos
-  const redirectMeta = isSocialCrawler ? "" : `<meta http-equiv="refresh" content="0;url=${redirectUrl}">`;
-  const redirectScript = isSocialCrawler ? "" : `
-    <script>
-      window.location.replace("${redirectUrl}");
-    </script>
-  `;
+  if (!isSocialCrawler) {
+    res.status(200).setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.end(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${redirectUrl}">
+<script>window.location.href = "${redirectUrl}";</script>
+<title>Redirecionando...</title>
+</head>
+<body>
+<p>Redirecionando para o produto...</p>
+<a href="${redirectUrl}">Clique aqui se não redirecionar</a>
+</body>
+</html>`);
+  }
 
   res.send(`
 <!DOCTYPE html>
@@ -186,14 +192,11 @@ app.get("/share/:productId", async (req, res) => {
         h1 { font-size: 1.5rem; margin: 0 20px 10px; text-align: center; }
         p { color: #888; font-size: 0.9rem; }
     </style>
-    
-    ${redirectScript}
-    ${redirectMeta}
 </head>
 <body>
     <div class="loader"></div>
     <h1>${productData.name}</h1>
-    <p>${isSocialCrawler ? 'Visualizando metadados...' : 'Redirecionando para o produto...'}</p>
+    <p>Visualizando metadados...</p>
 </body>
 </html>
   `);
