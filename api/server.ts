@@ -128,14 +128,22 @@ app.get("/share/:productId", async (req, res) => {
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
-  // Detecção de Crawler Social específica (sem termos genéricos para evitar falsos positivos)
-  const userAgent = req.headers['user-agent'] || "";
-  const isSocialCrawler = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|TelegramBot|WhatsApp/i.test(userAgent);
+  // Detecção de Crawler Social específica recomendada pelo usuário
+  const userAgent = String(req.headers["user-agent"] || "");
+  const isSocialCrawler =
+    /facebookexternalhit/i.test(userAgent) ||
+    /facebot/i.test(userAgent) ||
+    /twitterbot/i.test(userAgent) ||
+    /linkedinbot/i.test(userAgent) ||
+    /telegrambot/i.test(userAgent) ||
+    /whatsapp/i.test(userAgent);
 
-  // URL de Redirecionamento (Humano)
+  console.log("SHARE_ROUTE_UA", userAgent, "IS_SOCIAL_CRAWLER", isSocialCrawler);
+
+  // URL de Redirecionamento Final para o App (página do produto)
   const redirectUrl = `/?p=${productId}`;
 
-  // Redirecionamento exclusivo para humanos
+  // Estrutura de redirecionamento exclusiva para humanos
   const redirectMeta = isSocialCrawler ? "" : `<meta http-equiv="refresh" content="0;url=${redirectUrl}">`;
   const redirectScript = isSocialCrawler ? "" : `
     <script>
@@ -152,7 +160,7 @@ app.get("/share/:productId", async (req, res) => {
     <title>${productData.name} | Tri Burgers</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
     
-    <!-- Diagnóstico: Crawler=${isSocialCrawler ? 'YES' : 'NO'} ID=${productId} -->
+    <!-- Diagnóstico Silencioso: Crawler=${isSocialCrawler ? 'YES' : 'NO'} ID=${productId} -->
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
