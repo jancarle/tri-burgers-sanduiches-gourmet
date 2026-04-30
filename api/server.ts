@@ -128,14 +128,15 @@ app.get("/share/:productId", async (req, res) => {
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
-  const redirectUrl = `${baseUrl}/?p=${productId}`;
-
-  // Detecção de Crawler no Servidor
+  // Detecção de Crawler Social específica (sem termos genéricos para evitar falsos positivos)
   const userAgent = req.headers['user-agent'] || "";
-  const isSocialCrawler = /facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|TelegramBot/i.test(userAgent);
+  const isSocialCrawler = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|TelegramBot|WhatsApp/i.test(userAgent);
 
-  // HTML condicional: Crawlers recebem APENAS os metadados. Humanos recebem o redirecionamento.
-  const redirectMeta = isSocialCrawler ? "" : `<meta http-equiv="refresh" content="3;url=${redirectUrl}">`;
+  // URL de Redirecionamento (Humano)
+  const redirectUrl = `/?p=${productId}`;
+
+  // Redirecionamento exclusivo para humanos
+  const redirectMeta = isSocialCrawler ? "" : `<meta http-equiv="refresh" content="0;url=${redirectUrl}">`;
   const redirectScript = isSocialCrawler ? "" : `
     <script>
       window.location.replace("${redirectUrl}");
@@ -151,7 +152,7 @@ app.get("/share/:productId", async (req, res) => {
     <title>${productData.name} | Tri Burgers</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
     
-    <!-- Diagnóstico: DB=${foundInDB ? 'YES' : 'NO'} ID=${productId} Crawler=${isSocialCrawler ? 'YES' : 'NO'} -->
+    <!-- Diagnóstico: Crawler=${isSocialCrawler ? 'YES' : 'NO'} ID=${productId} -->
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
@@ -174,6 +175,8 @@ app.get("/share/:productId", async (req, res) => {
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff; }
         .loader { border: 4px solid #333; border-top: 4px solid #ef4444; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        h1 { font-size: 1.5rem; margin: 0 20px 10px; text-align: center; }
+        p { color: #888; font-size: 0.9rem; }
     </style>
     
     ${redirectScript}
@@ -182,7 +185,7 @@ app.get("/share/:productId", async (req, res) => {
 <body>
     <div class="loader"></div>
     <h1>${productData.name}</h1>
-    <p>${isSocialCrawler ? 'Visualizando metadados...' : 'Redirecionando...'}</p>
+    <p>${isSocialCrawler ? 'Visualizando metadados...' : 'Redirecionando para o produto...'}</p>
 </body>
 </html>
   `);
