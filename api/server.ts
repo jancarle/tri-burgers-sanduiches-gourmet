@@ -62,7 +62,8 @@ app.get("/share/:productId", async (req, res) => {
   res.status(200);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Robots-Tag', 'all');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Vary', 'User-Agent');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   const { productId } = req.params;
   const protocol = req.headers['x-forwarded-proto'] || "https";
@@ -140,23 +141,6 @@ app.get("/share/:productId", async (req, res) => {
 
   const redirectUrl = `/?p=${productId}`;
 
-  if (!isSocialCrawler) {
-    res.status(200).setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.end(`<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="refresh" content="0;url=${redirectUrl}">
-<script>window.location.href = "${redirectUrl}";</script>
-<title>Redirecionando...</title>
-</head>
-<body>
-<p>Redirecionando para o produto...</p>
-<a href="${redirectUrl}">Clique aqui se não redirecionar</a>
-</body>
-</html>`);
-  }
-
   res.send(`
 <!DOCTYPE html>
 <html lang="pt-br" prefix="og: http://ogp.me/ns#">
@@ -166,8 +150,6 @@ app.get("/share/:productId", async (req, res) => {
     <title>${productData.name} | Tri Burgers</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
     
-    <!-- Diagnóstico Silencioso: Crawler=${isSocialCrawler ? 'YES' : 'NO'} ID=${productId} -->
-
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${shareUrl}" />
     <meta property="og:title" content="${productData.name}" />
@@ -186,17 +168,22 @@ app.get("/share/:productId", async (req, res) => {
     <meta name="twitter:image" content="${productData.image}">
 
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff; }
-        .loader { border: 4px solid #333; border-top: 4px solid #ef4444; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        h1 { font-size: 1.5rem; margin: 0 20px 10px; text-align: center; }
-        p { color: #888; font-size: 0.9rem; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #000; color: #fff; padding: 20px; box-sizing: border-box; }
+        .card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 30px; max-width: 400px; width: 100%; text-align: center; }
+        .product-img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; }
+        h1 { font-size: 1.5rem; margin: 0 0 10px; color: #fff; }
+        p { color: #888; font-size: 0.9rem; margin-bottom: 25px; line-height: 1.4; }
+        .btn { background: #ef4444; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; transition: background 0.2s; display: inline-block; }
+        .btn:hover { background: #dc2626; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
-    <h1>${productData.name}</h1>
-    <p>Visualizando metadados...</p>
+    <div class="card">
+        <img src="${productData.image}" alt="${productData.name}" class="product-img">
+        <h1>${productData.name}</h1>
+        <p>${productData.description}</p>
+        <a href="${redirectUrl}" class="btn">Abrir cardápio</a>
+    </div>
 </body>
 </html>
   `);
