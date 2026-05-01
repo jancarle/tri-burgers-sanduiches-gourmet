@@ -698,6 +698,52 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
     setEditing(false);
   };
 
+  const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side validation
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+      alert("Erro: Apenas imagens JPG ou PNG são permitidas.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Erro: A imagem deve ter no máximo 2 MB.");
+      return;
+    }
+
+    setIsUploading(true);
+    console.log(`[CLOUDINARY] Iniciando upload para produto: ${draft.id}`);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/cloudinary/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.imageUrl) {
+        console.log(`[CLOUDINARY] Sucesso! URL: ${data.imageUrl}`);
+        setDraft(prev => ({ ...prev, image: data.imageUrl }));
+        alert("Imagem enviada com sucesso ao Cloudinary!");
+      } else {
+        throw new Error(data.error || "Erro desconhecido no servidor.");
+      }
+    } catch (err: any) {
+      console.error("[CLOUDINARY] ERRO:", err);
+      alert(`Não foi possível enviar a imagem. Tente novamente com JPG ou PNG menor que 2MB.\n${err.message || ""}`);
+    } finally {
+      setIsUploading(false);
+      console.log("[CLOUDINARY] Fluxo finalizado.");
+    }
+  };
+
   /*
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -875,6 +921,30 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[10px] text-zinc-500 uppercase font-black">Imagem do Produto (WhatsApp Preview)</label>
+              </div>
+
+              {/* Cloudinary Upload Section */}
+              <div className="flex gap-2">
+                <label className="flex-1 cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg p-3 hover:border-orange-500 transition-colors bg-zinc-900/30 group">
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    onChange={handleCloudinaryUpload} 
+                    accept="image/jpeg,image/png" 
+                    disabled={isUploading} 
+                  />
+                  {isUploading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                      <span className="text-[10px] text-zinc-500 font-bold uppercase">Enviando...</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-zinc-500 group-hover:text-orange-500 transition-colors">
+                      <Upload size={16} />
+                      <span className="text-[10px] uppercase font-black text-center">Enviar Foto p/ Cloudinary</span>
+                    </div>
+                  )}
+                </label>
               </div>
 
               {/* URL Input */}

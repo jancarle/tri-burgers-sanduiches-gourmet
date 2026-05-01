@@ -5,6 +5,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
 
 // Backup de dados para quando o Firestore falhar ou para respostas instantâneas
 const MENU_ITEMS_BACKUP = [
@@ -17,6 +19,20 @@ const MENU_ITEMS_BACKUP = [
 ];
 
 dotenv.config();
+
+// Configuração Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Configuração Multer
+const storageMulter = multer.memoryStorage();
+const upload = multer({ 
+  storage: storageMulter,
+  limits: { fileSize: 2 * 1024 * 1024 }
+});
 
 // Inicialização robusta do Firebase Admin
 let adminInitialized = false;
@@ -58,6 +74,40 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Rota de Upload Cloudinary Seguro
+  app.post("/api/cloudinary/upload", upload.single('image'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhum arquivo enviado." });
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ error: "Formato inválido. Use apenas JPG ou PNG." });
+      }
+
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'tri-burgers/products',
+          format: 'jpg',
+          transformation: [{ width: 1200, crop: "limit", quality: "auto" }]
+        },
+        (error, result) => {
+          if (error || !result) {
+            console.error("Cloudinary Error:", error);
+            return res.status(500).json({ error: "Erro no serviço de imagem." });
+          }
+          res.json({ success: true, imageUrl: result.secure_url });
+        }
+      );
+
+      uploadStream.end(req.file.buffer);
+    } catch (err: any) {
+      console.error("Upload API Error:", err);
+      res.status(500).json({ error: "Falha interna no upload." });
+    }
+  });
 
 const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 

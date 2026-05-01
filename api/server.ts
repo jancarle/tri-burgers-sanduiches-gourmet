@@ -3,6 +3,8 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
 
 // Backup de dados para quando o Firestore falhar ou para respostas instantâneas
 const MENU_ITEMS_BACKUP = [
@@ -16,8 +18,59 @@ const MENU_ITEMS_BACKUP = [
 
 dotenv.config();
 
+// Configuração Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Configuração Multer (In-memory)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
+});
+
 const app = express();
 app.use(express.json());
+
+// Rota de Upload Cloudinary Seguro
+app.post("/api/cloudinary/upload", upload.single('image'), async (req: any, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Nenhum arquivo enviado." });
+    }
+
+    // Validar tipo de arquivo
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: "Formato inválido. Use apenas JPG ou PNG." });
+    }
+
+    // Upload para o Cloudinary usando buffer
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'tri-burgers/products',
+        format: 'jpg', // Garante formato JPG para melhor compatibilidade social
+        transformation: [{ width: 1200, crop: "limit", quality: "auto" }]
+      },
+      (error, result) => {
+        if (error || !result) {
+          console.error("Cloudinary Error:", error);
+          return res.status(500).json({ error: "Erro no serviço de imagem." });
+        }
+        res.json({ success: true, imageUrl: result.secure_url });
+      }
+    );
+
+    uploadStream.end(req.file.buffer);
+
+  } catch (err: any) {
+    console.error("Upload API Error:", err);
+    res.status(500).json({ error: "Falha interna no upload." });
+  }
+});
 
 // Inicialização robusta do Firebase Admin
 let adminInitialized = false;
