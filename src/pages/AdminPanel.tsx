@@ -726,6 +726,13 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
         body: formData,
       });
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const errorText = await response.text();
+        console.error("[CLOUDINARY] Resposta não-JSON:", errorText);
+        throw new Error("O servidor retornou uma resposta inválida (HTML). Verifique se as rotas da API estão configuradas corretamente.");
+      }
+
       const data = await response.json();
 
       if (data.success && data.imageUrl) {

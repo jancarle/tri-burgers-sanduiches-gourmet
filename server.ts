@@ -79,12 +79,12 @@ async function startServer() {
   app.post("/api/cloudinary/upload", upload.single('image'), async (req: any, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "Nenhum arquivo enviado." });
+        return res.status(400).json({ success: false, error: "Nenhum arquivo enviado." });
       }
 
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
       if (!allowedTypes.includes(req.file.mimetype)) {
-        return res.status(400).json({ error: "Formato inválido. Use apenas JPG ou PNG." });
+        return res.status(400).json({ success: false, error: "Formato inválido. Use apenas JPG ou PNG." });
       }
 
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -96,16 +96,16 @@ async function startServer() {
         (error, result) => {
           if (error || !result) {
             console.error("Cloudinary Error:", error);
-            return res.status(500).json({ error: "Erro no serviço de imagem." });
+            return res.status(500).json({ success: false, error: "Erro no serviço de imagem Cloudinary." });
           }
-          res.json({ success: true, imageUrl: result.secure_url });
+          return res.json({ success: true, imageUrl: result.secure_url });
         }
       );
 
       uploadStream.end(req.file.buffer);
     } catch (err: any) {
       console.error("Upload API Error:", err);
-      res.status(500).json({ error: "Falha interna no upload." });
+      return res.status(500).json({ success: false, error: "Falha interna no upload: " + (err.message || 'Erro desconhecido') });
     }
   });
 

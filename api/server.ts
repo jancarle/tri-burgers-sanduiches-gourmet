@@ -39,28 +39,28 @@ app.use(express.json());
 app.post("/api/cloudinary/upload", upload.single('image'), async (req: any, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Nenhum arquivo enviado." });
+      return res.status(400).json({ success: false, error: "Nenhum arquivo enviado." });
     }
 
     // Validar tipo de arquivo
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
     if (!allowedTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({ error: "Formato inválido. Use apenas JPG ou PNG." });
+      return res.status(400).json({ success: false, error: "Formato inválido. Use apenas JPG ou PNG." });
     }
 
     // Upload para o Cloudinary usando buffer
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: 'tri-burgers/products',
-        format: 'jpg', // Garante formato JPG para melhor compatibilidade social
+        format: 'jpg', // Garante formato JPG
         transformation: [{ width: 1200, crop: "limit", quality: "auto" }]
       },
       (error, result) => {
         if (error || !result) {
           console.error("Cloudinary Error:", error);
-          return res.status(500).json({ error: "Erro no serviço de imagem." });
+          return res.status(500).json({ success: false, error: "Erro no serviço de imagem Cloudinary." });
         }
-        res.json({ success: true, imageUrl: result.secure_url });
+        return res.json({ success: true, imageUrl: result.secure_url });
       }
     );
 
@@ -68,7 +68,7 @@ app.post("/api/cloudinary/upload", upload.single('image'), async (req: any, res)
 
   } catch (err: any) {
     console.error("Upload API Error:", err);
-    res.status(500).json({ error: "Falha interna no upload." });
+    return res.status(500).json({ success: false, error: "Falha interna no upload: " + (err.message || 'Erro desconhecido') });
   }
 });
 
