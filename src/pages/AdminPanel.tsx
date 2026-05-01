@@ -675,16 +675,30 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleSave = () => {
+    const normalizedUrl = normalizeImageUrl(draft.image || "");
+    
+    // Validations
+    if (normalizedUrl && !normalizedUrl.startsWith("https://")) {
+      alert("Erro: A imagem precisa ser uma URL HTTPS segura para aparecer no WhatsApp.");
+      return;
+    }
+
+    if (normalizedUrl && !normalizedUrl.includes(".")) {
+      alert("Erro: Informe uma URL de imagem válida (ex: https://site.com/foto.jpg)");
+      return;
+    }
+
     const updatedItem = {
       ...draft,
       price: Number(draft.price),
-      image: normalizeImageUrl(draft.image || "")
+      image: normalizedUrl
     };
     
     onUpdate(updatedItem);
     setEditing(false);
   };
 
+  /*
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -748,6 +762,7 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
       console.log("[UPLOAD] Fluxo finalizado.");
     }
   };
+  */
 
   const isWebp = draft.image?.toLowerCase().includes(".webp");
   const isNotHttps = draft.image && !draft.image.startsWith("https://");
@@ -858,58 +873,60 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
             </div>
 
             <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-zinc-400">Imagem do Produto</label>
-                {draft.image && (
-                  <div className="w-12 h-12 rounded border border-zinc-700 overflow-hidden bg-black">
-                    <img src={draft.image} alt="Preview" className="w-full h-full object-cover" />
-                  </div>
-                )}
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] text-zinc-500 uppercase font-black">Imagem do Produto (WhatsApp Preview)</label>
               </div>
 
-              {/* Upload Section */}
-              <div className="flex gap-2">
-                <label className="flex-1 cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg p-2 hover:border-orange-500 transition-colors bg-zinc-900/30">
-                  <input type="file" className="hidden" onChange={handleFileUpload} accept="image/jpeg,image/png" disabled={isUploading} />
-                  {isUploading ? (
-                    <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
-                  ) : (
-                    <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-zinc-500">
-                      <Upload size={14} /> Enviar Imagem
-                    </div>
-                  )}
-                </label>
-              </div>
-
-              <div>
-                <label className="text-[10px] text-zinc-500 uppercase font-black mb-1 block">URL Manual</label>
+              {/* URL Input */}
+              <div className="space-y-2">
                 <input 
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 focus:outline-none" 
-                  placeholder="https://site.com/foto.jpg"
+                  className={`w-full bg-zinc-900 border ${isNotHttps && draft.image ? 'border-red-500' : 'border-zinc-700'} rounded p-3 text-sm text-white focus:border-red-500 focus:outline-none transition-colors`} 
+                  placeholder="https://site.com/sua-foto-gourmet.jpg"
                   value={draft.image || ''} 
                   onChange={e => setDraft({...draft, image: e.target.value})} 
                   onBlur={e => setDraft({...draft, image: normalizeImageUrl(e.target.value)})}
                 />
+                
+                {/* Visual Preview */}
+                <div className="aspect-video w-full rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden flex items-center justify-center relative group">
+                  {draft.image ? (
+                    <>
+                      <img 
+                        src={draft.image} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-bold text-white uppercase tracking-widest">Preview Digital</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-zinc-500">
+                      <ImageIcon size={24} />
+                      <span className="text-[10px] uppercase font-bold">Sem imagem definida</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Warnings */}
-              <div className="space-y-1">
-                <div className="text-[10px] text-orange-400 font-bold bg-orange-500/5 p-2 rounded border border-orange-500/10 italic">
-                   Aviso: Para aparecer corretamente no WhatsApp, use imagem JPG ou PNG em boa qualidade.
+              {/* Warnings and Tips */}
+              <div className="space-y-2">
+                <div className="text-[10px] text-zinc-400 bg-zinc-900/50 p-2 rounded border border-zinc-800">
+                  <span className="text-orange-500 font-black">DICA:</span> Use imagens do <a href="https://unsplash.com" target="_blank" rel="noreferrer" className="text-blue-400 underline">Unsplash</a> ou links diretos de alta qualidade para o melhor resultado no WhatsApp.
                 </div>
+
                 {isWebp && (
                   <div className="flex items-center gap-1.5 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
-                    <AlertCircle size={12} /> WebP detectado. Recomendamos trocar por JPG para melhor compatibilidade.
+                    <AlertCircle size={12} /> <span className="uppercase">Aviso:</span> WebP detectado. Use JPG ou PNG para garantir o preview no WhatsApp.
                   </div>
                 )}
+                
                 {isNotHttps && draft.image && (
                   <div className="flex items-center gap-1.5 text-[10px] text-red-500 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">
-                    <Info size={12} /> A URL deve ser HTTPS segura.
-                  </div>
-                )}
-                {isRelative && (
-                  <div className="flex items-center gap-1.5 text-[10px] text-orange-400 font-bold bg-orange-500/10 p-2 rounded border border-orange-500/20">
-                    <Info size={12} /> Esta imagem é local. Ela será convertida para URL absoluta ao salvar.
+                    <Info size={12} /> <span className="uppercase">Erro:</span> A imagem precisa ser HTTPS (Segura).
                   </div>
                 )}
               </div>
