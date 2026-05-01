@@ -61,100 +61,113 @@ async function startServer() {
 
 const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 
-  // Rota para metadados dinâmicos (Open Graph)
-  app.get("/share/:productId", async (req, res) => {
-    const { productId } = req.params;
-    const userAgent = String(req.headers["user-agent"] || "");
-    const redirectUrl = `/?p=${productId}`;
+    // Rota para metadados dinâmicos (Open Graph)
+    app.get("/share/:productId", async (req, res) => {
+      const startTime = Date.now();
+      const { productId } = req.params;
+      const userAgent = String(req.headers["user-agent"] || "");
+      const redirectUrl = `/?p=${productId}`;
 
-    // Detecção de Crawler Social específica
-    const isSocialCrawler =
-      /facebookexternalhit/i.test(userAgent) ||
-      /facebot/i.test(userAgent) ||
-      /whatsapp/i.test(userAgent) ||
-      /twitterbot/i.test(userAgent) ||
-      /linkedinbot/i.test(userAgent) ||
-      /telegrambot/i.test(userAgent);
+      // Detecção de Crawler Social específica
+      const isSocialCrawler =
+        /facebookexternalhit/i.test(userAgent) ||
+        /facebot/i.test(userAgent) ||
+        /whatsapp/i.test(userAgent) ||
+        /twitterbot/i.test(userAgent) ||
+        /linkedinbot/i.test(userAgent) ||
+        /telegrambot/i.test(userAgent);
 
-    // Redirecionamento imediato para humanos (Servidor)
-    if (!isSocialCrawler) {
+      console.log(`[SHARE] ID: ${productId} | Crawler: ${isSocialCrawler} | UA: ${userAgent}`);
+
+      // Redirecionamento imediato para humanos (Servidor)
+      if (!isSocialCrawler) {
+        res.setHeader('Vary', 'User-Agent');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        return res.redirect(302, redirectUrl);
+      }
+
+      // Configuração para Crawlers
+      res.status(200);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', 'all');
       res.setHeader('Vary', 'User-Agent');
+      // Garantir que crawlers recebam sempre a versão mais fresca (zero cache)
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      return res.redirect(302, redirectUrl);
-    }
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
 
-    // Configuração para Crawlers
-    res.status(200);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('X-Robots-Tag', 'all');
-    res.setHeader('Vary', 'User-Agent');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || "https";
+      const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
+      const baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || `${protocol}://${host}`;
+      
+      const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1200&h=630";
+      
+      // Tenta encontrar nos backups primeiro para resposta imediata
+      const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);
 
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || "https";
-    const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
-    const baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || `${protocol}://${host}`;
-    
-    // Tenta encontrar nos backups primeiro para resposta imediata
-    const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);
+      let productData = {
+        name: backupProduct?.name || "Tri Burgers | O Melhor de Goiânia",
+        description: "Confira nosso cardápio completo e peça agora o melhor burger artesanal e pit dog de Goiânia!",
+        image: backupProduct?.image || DEFAULT_IMAGE
+      };
 
-    let productData = {
-      name: backupProduct?.name || "Delícia da Lanchonete",
-      description: "Confira nosso cardápio completo e peça agora o melhor burger de Goiânia!",
-      image: backupProduct?.image || "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1200&h=630"
-    };
+      let foundInDB = false;
 
-    let foundInDB = false;
-
-    if (adminInitialized) {
-      try {
-        console.log(`🔍 [DEV] Buscando no DB ${DATABASE_ID}: ${productId}`);
-        const db = getFirestore(DATABASE_ID);
-        
-        const docPromise = db.collection("menu").doc(productId).get();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500));
-        
-        const doc = await Promise.race([docPromise, timeoutPromise]) as admin.firestore.DocumentSnapshot;
-
-        if (doc.exists) {
-          const data = doc.data();
-          foundInDB = true;
+      if (adminInitialized) {
+        try {
+          const db = getFirestore(DATABASE_ID);
           
-          productData.name = data?.name || productData.name;
+          const docPromise = db.collection("menu").doc(productId).get();
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000));
           
-          if (data?.image && typeof data.image === 'string' && data.image.trim() !== "") {
-            productData.image = data.image.trim();
+          const doc = await Promise.race([docPromise, timeoutPromise]) as admin.firestore.DocumentSnapshot;
+
+          if (doc.exists) {
+            const data = doc.data();
+            foundInDB = true;
+            
+            productData.name = data?.name || productData.name;
+            
+            if (data?.image && typeof data.image === 'string' && data.image.trim() !== "") {
+              productData.image = data.image.trim();
+            }
+            
+            if (data?.description) {
+              productData.description = data.description.length > 150 ? `${data.description.substring(0, 147)}...` : data.description;
+            }
+            
+            if (data?.price) {
+              const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.price);
+              productData.description = `${formattedPrice} - ${productData.description}`;
+            }
           }
-          
-          if (data?.description) {
-            productData.description = data.description.length > 150 ? `${data.description.substring(0, 147)}...` : data.description;
-          }
-          
-          if (data?.price) {
-            const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.price);
-            productData.description = `${formattedPrice} - ${productData.description}`;
-          }
+        } catch (err) {
+          console.error(`❌ [SHARE] Erro ID ${productId}:`, err instanceof Error ? err.message : err);
         }
-      } catch (err) {
-        console.error("❌ Erro ao buscar produto para OG:", err);
       }
-    }
 
-    // Garantir imagem absoluta e segura (HTTPS)
-    if (productData.image && typeof productData.image === 'string') {
-      let imgUrl = productData.image;
-      if (!imgUrl.startsWith('http')) {
-        const cleanImgPath = imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`;
-        imgUrl = `${baseUrl}${cleanImgPath}`;
+      // Garantir imagem absoluta, segura (HTTPS) e válida
+      if (!productData.image || productData.image === "") {
+        productData.image = DEFAULT_IMAGE;
       }
-      if (imgUrl.startsWith('http://')) {
-        imgUrl = imgUrl.replace('http://', 'https://');
+
+      if (typeof productData.image === 'string') {
+        let imgUrl = productData.image;
+        if (!imgUrl.startsWith('http')) {
+          const cleanImgPath = imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`;
+          imgUrl = `${baseUrl}${cleanImgPath}`;
+        }
+        if (imgUrl.startsWith('http://')) {
+          imgUrl = imgUrl.replace('http://', 'https://');
+        }
+        productData.image = imgUrl;
       }
-      productData.image = imgUrl;
-    }
 
-    const shareUrl = `${baseUrl}/share/${productId}`;
+      const shareUrl = `${baseUrl}/share/${productId}`;
+      const duration = Date.now() - startTime;
+      console.log(`✅ [SHARE] Finalizado em ${duration}ms | Imagem: ${productData.image}`);
 
-    res.send(`<!DOCTYPE html>
+      res.send(`<!DOCTYPE html>
 <html lang="pt-br" prefix="og: http://ogp.me/ns#">
 <head>
     <meta charset="UTF-8" />
@@ -173,10 +186,10 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
     <meta name="twitter:image" content="${productData.image}">
 </head>
 <body style="background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
-    <p>Processando link...</p>
+    <p>Redirecionando para o cardápio...</p>
 </body>
 </html>`);
-  });
+    });
 
   // Rota segura para IA (Gemini) - Chave protegida no backend para produção na Vercel
   app.post("/api/gemini/generate-post", async (req, res) => {

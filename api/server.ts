@@ -58,6 +58,7 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 
 // Rota para metadados dinâmicos (Open Graph)
 app.get("/share/:productId", async (req, res) => {
+  const startTime = Date.now();
   const { productId } = req.params;
   const userAgent = String(req.headers["user-agent"] || "");
   const redirectUrl = `/?p=${productId}`;
@@ -71,6 +72,8 @@ app.get("/share/:productId", async (req, res) => {
     /linkedinbot/i.test(userAgent) ||
     /telegrambot/i.test(userAgent);
 
+  console.log(`[SHARE VERCEL] ID: ${productId} | Crawler: ${isSocialCrawler} | UA: ${userAgent}`);
+
   // Redirecionamento imediato para humanos (Servidor)
   if (!isSocialCrawler) {
     res.setHeader('Vary', 'User-Agent');
@@ -83,33 +86,38 @@ app.get("/share/:productId", async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Robots-Tag', 'all');
   res.setHeader('Vary', 'User-Agent');
+  // Garantir que crawlers recebam sempre a versão mais fresca (zero cache)
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || "https";
   const host = req.get('host') || "tri-burgers-sanduiches-gourmet.vercel.app";
-  const baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || `https://${host}`;
+  const baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || `${protocol}://${host}`;
   
+  const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1200&h=630";
+
   // Tenta encontrar nos backups primeiro para resposta imediata
   const backupProduct = MENU_ITEMS_BACKUP.find(i => i.id === productId);
 
   let productData = {
-    name: backupProduct?.name || "Delícia da Lanchonete",
-    description: "Confira nosso cardápio completo e peça agora o melhor burger de Goiânia!",
-    image: backupProduct?.image || "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1200&h=630"
+    name: backupProduct?.name || "Tri Burgers | O Melhor de Goiânia",
+    description: "Confira nosso cardápio completo e peça agora o melhor burger artesanal e pit dog de Goiânia!",
+    image: backupProduct?.image || DEFAULT_IMAGE
   };
 
   let foundInDB = false;
 
   if (adminInitialized) {
     try {
-      console.log(`🔍 [Vercel OG] Buscando no DB ${DATABASE_ID}: ${productId}`);
       const cleanId = String(productId).trim();
       
       // Busca no banco de dados específico utilizando getFirestore
       const db = getFirestore(DATABASE_ID);
       
       const docPromise = db.collection("menu").doc(cleanId).get();
-      // Temporizador agressivo para redes sociais (não podem esperar)
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
+      // Timeout seguro de 2000ms
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000));
       
       const doc = await Promise.race([docPromise, timeoutPromise]) as admin.firestore.DocumentSnapshot;
 
@@ -133,12 +141,16 @@ app.get("/share/:productId", async (req, res) => {
         }
       }
     } catch (err) {
-      console.error("❌ [Vercel OG] Fallback para backup devido a erro:", err);
+      console.error(`❌ [SHARE VERCEL] Erro ID ${productId}:`, err instanceof Error ? err.message : err);
     }
   }
 
-  // Garantir imagem absoluta e segura (HTTPS) para WhatsApp/Facebook
-  if (productData.image && typeof productData.image === 'string') {
+  // Garantir imagem absoluta, segura (HTTPS) e válida para WhatsApp/Facebook
+  if (!productData.image || productData.image === "") {
+    productData.image = DEFAULT_IMAGE;
+  }
+
+  if (typeof productData.image === 'string') {
     let imgUrl = productData.image;
     if (!imgUrl.startsWith('http')) {
       const cleanImgPath = imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`;
@@ -152,6 +164,8 @@ app.get("/share/:productId", async (req, res) => {
   }
 
   const shareUrl = `${baseUrl}/share/${productId}`;
+  const duration = Date.now() - startTime;
+  console.log(`✅ [SHARE VERCEL] Finalizado em ${duration}ms | Imagem: ${productData.image}`);
 
   res.send(`<!DOCTYPE html>
 <html lang="pt-br" prefix="og: http://ogp.me/ns#">
@@ -172,7 +186,7 @@ app.get("/share/:productId", async (req, res) => {
     <meta name="twitter:image" content="${productData.image}">
 </head>
 <body style="background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
-    <p>Processando link...</p>
+    <p>Redirecionando para o cardápio...</p>
 </body>
 </html>`);
 });
