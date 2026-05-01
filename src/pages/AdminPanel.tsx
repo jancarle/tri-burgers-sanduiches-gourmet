@@ -715,28 +715,37 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
     }
 
     setIsUploading(true);
-    try {
-      // Process image: Resize to 1200px max width and compress to 0.85 JPG
+    console.log(`[UPLOAD] Iniciando para produto: ${item.id}`);
+
+    // Timeout de 15 segundos para toda a operação (processamento + upload)
+    const uploadTimeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout: O processo demorou demais. Verifique se a imagem é muito pesada ou se sua conexão está instável.")), 15000)
+    );
+
+    const performUpload = async () => {
+      console.log("[UPLOAD] Etapa 1: Processando imagem...");
       const processedBlob = await processImage(file, { maxWidth: 1200, quality: 0.85 });
       
-      // Upload to products/{productId}/main.jpg
+      console.log("[UPLOAD] Etapa 2: Enviando para Storage...");
       const storageRef = ref(storage, `products/${item.id}/main.jpg`);
-      const snapshot = await uploadBytes(storageRef, processedBlob, {
-        contentType: 'image/jpeg'
-      });
+      const snapshot = await uploadBytes(storageRef, processedBlob, { contentType: 'image/jpeg' });
       
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      
-      // Update draft image URL with the new cloud URL
-      // Use a cache buster if necessary, but Storage URLs usually include a token that changes
+      console.log("[UPLOAD] Etapa 3: Obtendo URL...");
+      return await getDownloadURL(snapshot.ref);
+    };
+
+    try {
+      const downloadURL = await Promise.race([performUpload(), uploadTimeout]) as string;
+      console.log(`[UPLOAD] Sucesso! URL: ${downloadURL}`);
+
       setDraft(prev => ({ ...prev, image: downloadURL }));
-      
       alert("Imagem enviada com sucesso!");
     } catch (err: any) {
-      console.error("Upload error:", err);
-      alert(err.message || "Erro ao enviar imagem.");
+      console.error("[UPLOAD] ERRO:", err);
+      alert(err.message || "Erro inesperado ao enviar imagem.");
     } finally {
       setIsUploading(false);
+      console.log("[UPLOAD] Fluxo finalizado.");
     }
   };
 
