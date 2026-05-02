@@ -6,7 +6,7 @@ import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnaps
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
 import { MenuItem } from '../types';
-import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
+import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generateMarketingPost } from '../services/geminiService';
 import { processImage } from '../lib/imageUtils';
@@ -44,6 +44,45 @@ export default function AdminPanel() {
   const [isGenerating, setIsGenerating] = useState(false);
   
   const [isPremium, setIsPremium] = useState(false); 
+  
+  // Per-client Gemini Key State
+  const [geminiKey, setGeminiKey] = useState('');
+  const [isGeminiConfigured, setIsGeminiConfigured] = useState(false);
+  const [isSavingKey, setIsSavingKey] = useState(false);
+
+  const checkGeminiStatus = async () => {
+    try {
+      const resp = await fetch('/api/settings/status');
+      const data = await resp.json();
+      setIsGeminiConfigured(data.isConfigured);
+    } catch (err) {
+      console.error("Status check error:", err);
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    if (!geminiKey.trim()) return;
+    setIsSavingKey(true);
+    try {
+      const resp = await fetch('/api/settings/gemini-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: geminiKey.trim() })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        alert("Chave Gemini salva e protegida com sucesso!");
+        setGeminiKey('');
+        checkGeminiStatus();
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      alert(`Erro: ${err.message || 'Falha ao salvar chave'}`);
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
 
   const isAgencyOwner = user?.email === 'marketingjan@gmail.com';
 
@@ -91,6 +130,7 @@ export default function AdminPanel() {
     if (user) {
       fetchItems();
       fetchSettings();
+      checkGeminiStatus();
       
       const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
       const unsub = onSnapshot(q, (snap) => {
@@ -372,7 +412,7 @@ export default function AdminPanel() {
                   Criador Viral IA 
                   <span className="bg-orange-500/20 text-orange-500 text-[10px] px-2 py-0.5 rounded-full border border-orange-500/30 uppercase font-black tracking-widest">Experimental Beta</span>
                 </h2>
-                <p className="text-zinc-400 mt-1">Gere posts irresistíveis com Inteligência Artificial.</p>
+                <p className="text-zinc-400 mt-1">Gere mensagens prontas para WhatsApp com alto potencial de conversão.</p>
               </div>
               <div className="hidden md:block text-right">
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter block">Status do Recurso</span>
@@ -383,30 +423,85 @@ export default function AdminPanel() {
             </div>
 
             {/* Legal Disclaimer / Protection Block */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-[11px] text-zinc-500 leading-relaxed">
-              <p className="font-bold text-zinc-400 mb-1 uppercase tracking-tight flex items-center gap-1.5">
-                <Info size={14} className="text-orange-500" /> 
-                Termos de Uso do Gerador de Conteúdo
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-500 leading-relaxed space-y-3">
+              <p className="font-bold text-zinc-300 uppercase tracking-tight flex items-center gap-1.5 text-xs">
+                <AlertCircle size={14} className="text-orange-500" /> 
+                ⚠️ SOBRE O FUNCIONAMENTO DAS PRÉVIAS NO WHATSAPP
               </p>
-              Este é um recurso robusto integrado via servidor que utiliza Inteligência Artificial. 
-              As chaves de API estão protegidas e a segurança é garantida.
-              O sucesso do "Preview de Imagem" depende do processamento de links pelo WhatsApp (Open Graph), ferramenta esta externa ao nosso sistema.
+              <p>Este recurso gera textos otimizados e links inteligentes para compartilhamento.</p>
+              <p>
+                A exibição de imagem (preview) no WhatsApp depende de fatores externos, como:<br />
+                • Processamento do próprio WhatsApp<br />
+                • Cache da plataforma<br />
+                • Tempo de resposta do servidor<br />
+                • Leitura de metadados (Open Graph)
+              </p>
+              <p>Por se tratar de sistemas de terceiros, o funcionamento da prévia pode variar e não pode ser garantido em 100% dos envios.</p>
+              <p className="font-bold text-zinc-400 italic">O sistema continua funcionando normalmente mesmo sem a exibição da imagem.</p>
             </div>
 
-            {/* AI Config Section */}
-            <div className="bg-zinc-800 border border-zinc-700/50 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            {/* AI Config Section - Gemini API Key */}
+            <div className="bg-zinc-800 border border-zinc-700/50 rounded-2xl p-6 shadow-xl relative overflow-hidden space-y-6">
                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl pointer-events-none" />
                <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
                   <div className="flex-1">
                     <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
                        <Lock size={18} className="text-orange-500" /> 
-                       IA de Marketing Ativa
+                       🤖 IA de Marketing Ativa
                     </h3>
-                    <p className="text-sm text-zinc-400">
-                      O gerador de posts virais está configurado e protegido via servidor. 
-                      Você não precisa mais colar sua chave aqui. Basta escolher um produto e gerar! 🚀
+                    <p className="text-sm text-zinc-400 leading-relaxed">
+                      O sistema gera automaticamente mensagens persuasivas com base no produto selecionado.<br />
+                      O envio e a exibição no WhatsApp seguem o comportamento da própria plataforma.
                     </p>
                   </div>
+               </div>
+
+               <div className="border-t border-zinc-700/50 pt-6">
+                 <h3 className="font-bold text-sm text-zinc-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                   <Key size={16} className="text-orange-500" /> Configuração da API
+                 </h3>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                   <div className="space-y-2">
+                     <label className="text-[10px] text-zinc-500 font-black uppercase">Chave Gemini do Cliente</label>
+                     <input 
+                       type="password"
+                       placeholder="Cole sua chave Gemini aqui..."
+                       value={geminiKey}
+                       onChange={(e) => setGeminiKey(e.target.value)}
+                       className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                     />
+                   </div>
+                   <button 
+                     onClick={handleSaveGeminiKey}
+                     disabled={!geminiKey || isSavingKey}
+                     className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 text-white font-bold py-3 px-6 rounded-lg transition-all h-[46px] flex items-center justify-center gap-2"
+                   >
+                     {isSavingKey ? <RefreshCw size={18} className="animate-spin" /> : "Salvar Chave"}
+                   </button>
+                 </div>
+
+                 <div className="mt-4 flex items-center gap-2">
+                   <div className={`w-2 h-2 rounded-full ${isGeminiConfigured ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                   <span className="text-[10px] font-bold uppercase tracking-tighter text-zinc-400">
+                     Status: {isGeminiConfigured ? 'Chave configurada e ativa' : 'Chave não configurada'}
+                   </span>
+                 </div>
+               </div>
+
+               <div className="bg-zinc-900/50 border border-zinc-700 rounded-xl p-5 text-[11px] text-zinc-500 leading-relaxed space-y-3">
+                 <p className="font-bold text-zinc-300 uppercase tracking-tight flex items-center gap-1.5 text-xs">
+                   <Key size={14} className="text-orange-500" /> 
+                   🔑 SOBRE A CHAVE GEMINI
+                 </p>
+                 <p>O recurso de IA utiliza a API Gemini do Google. A chave de API deve ser fornecida pelo próprio cliente ou responsável pela loja.</p>
+                 <p>
+                   A disponibilidade, gratuidade, limites de uso, cobrança, quota e funcionamento da API Gemini são definidos pelo Google e podem mudar sem aviso prévio. 
+                   O sistema apenas conecta a chave fornecida pelo cliente ao gerador de conteúdo.
+                 </p>
+                 <p className="text-zinc-400 font-bold">
+                   Não nos responsabilizamos por limite de uso excedido, indisponibilidade da API, alterações de política ou bloqueio da chave.
+                 </p>
                </div>
             </div>
 
@@ -507,11 +602,15 @@ export default function AdminPanel() {
                       )}
                     </button>
                     
-                    <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                      <p className="text-xs text-orange-400 leading-relaxed font-medium">
-                        <AlertCircle size={14} className="inline mr-1 mb-0.5" />
-                        A IA lerá os ingredientes e o preço do produto para criar um texto altamente persuasivo focado em vendas rápidas no WhatsApp.
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
+                      <p className="text-xs text-blue-400 leading-relaxed font-bold flex items-center gap-2">
+                        <Sparkles size={14} /> 💡 O texto gerado já está pronto para envio.
                       </p>
+                      <ul className="text-[10px] text-zinc-400 space-y-1 ml-5 list-disc leading-tight">
+                        <li>Envie o link ao final da mensagem</li>
+                        <li>Evite editar o link</li>
+                        <li>Use o botão "Copiar Texto" para maior compatibilidade</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
@@ -612,7 +711,11 @@ export default function AdminPanel() {
                               cleanText = cleanText.substring(0, 397) + "...";
                             }
 
-                            const finalMessage = `🔥 *${product.name.toUpperCase()}*\n\n${cleanText}\n\n👇 Veja o lanche:\n${shareLink}`;
+                            // VERSÃO SEM EMOJIS para WhatsApp URL (evita quebra no desktop)
+                            // Remove emojis (simple regex)
+                            const cleanTextNoEmoji = cleanText.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF])/g, '');
+
+                            const finalMessage = `[PRODUTO] ${product.name.toUpperCase()}\n\n${cleanTextNoEmoji}\n\nConfira em:\n${shareLink}`;
                             
                             window.open(`https://wa.me/?text=${encodeURIComponent(finalMessage)}`, '_blank');
                           }}

@@ -4,9 +4,10 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import path from "path";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
+import crypto from 'crypto';
 
 // Backup de dados para quando o Firestore falhar ou para respostas instantâneas
 const MENU_ITEMS_BACKUP = [
@@ -19,6 +20,38 @@ const MENU_ITEMS_BACKUP = [
 ];
 
 dotenv.config();
+
+// Encryption Utils
+const ENCRYPTION_KEY = process.env.SERVER_ENCRYPTION_KEY || 'default-secret-key-32-chars-long-!!!';
+const IV_LENGTH = 16;
+
+function encrypt(text: string) {
+  try {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.padEnd(32).substring(0, 32)), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+  } catch (err) {
+    console.error("Encryption error:", err);
+    return null;
+  }
+}
+
+function decrypt(text: string) {
+  try {
+    const textParts = text.split(':');
+    const iv = Buffer.from(textParts.shift()!, 'hex');
+    const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.padEnd(32).substring(0, 32)), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+  } catch (err) {
+    console.error("Decryption error:", err);
+    return null;
+  }
+}
 
 // Configuração Cloudinary
 cloudinary.config({
@@ -110,6 +143,48 @@ async function startServer() {
   });
 
 const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
+
+  // Rota para salvar a chave Gemini do cliente de forma segura
+  app.post("/api/settings/gemini-key", async (req, res) => {
+    try {
+      const { key } = req.body;
+      if (!key || key.trim() === "") {
+        return res.status(400).json({ success: false, error: "Chave não fornecida." });
+      }
+
+      if (!adminInitialized) {
+        return res.status(500).json({ success: false, error: "Serviço de banco de dados indisponível." });
+      }
+
+      const encryptedKey = encrypt(key.trim());
+      if (!encryptedKey) throw new Error("Erro ao criptografar a chave.");
+
+      const db = getFirestore(DATABASE_ID);
+      await db.collection("settings").doc("gemini").set({
+        encryptedKey: encryptedKey,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, message: "Chave configurada com sucesso!" });
+    } catch (err: any) {
+      console.error("Save Key Error:", err);
+      return res.status(500).json({ success: false, error: "Erro ao salvar configuração." });
+    }
+  });
+
+  // Rota para verificar status da chave Gemini
+  app.get("/api/settings/status", async (req, res) => {
+    try {
+      if (!adminInitialized) return res.json({ isConfigured: false });
+      
+      const db = getFirestore(DATABASE_ID);
+      const doc = await db.collection("settings").doc("gemini").get();
+      
+      return res.json({ isConfigured: doc.exists && !!doc.data()?.encryptedKey });
+    } catch (err) {
+      return res.json({ isConfigured: false });
+    }
+  });
 
     // Rota para metadados dinâmicos (Open Graph)
     app.get("/share/:productId", async (req, res) => {
@@ -241,62 +316,77 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 </html>`);
     });
 
-  // Rota segura para IA (Gemini) - Chave protegida no backend para produção na Vercel
+  // Rota segura para IA (Gemini) - Usa a chave do cliente se existir
   app.post("/api/gemini/generate-post", async (req, res) => {
-    const { product, shareLink } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    // Garante que o retorno seja sempre JSON, mesmo em erro
-    if (!apiKey) {
-      return res.status(500).json({ 
-        error: "Configuração do servidor incompleta: GEMINI_API_KEY não encontrada no ambiente." 
-      });
-    }
-
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const { product, shareLink } = req.body;
+      let apiKey = null;
+
+      // 1. Tentar buscar chave do cliente no banco (Prioridade Total)
+      if (adminInitialized) {
+        const db = getFirestore(DATABASE_ID);
+        const settingsDoc = await db.collection("settings").doc("gemini").get();
+        if (settingsDoc.exists) {
+          const encrypted = settingsDoc.data()?.encryptedKey;
+          if (encrypted) {
+            apiKey = decrypt(encrypted);
+          }
+        }
+      }
+
+      // 2. Se não houver chave do cliente, retorna erro (Fallback global removido para uso do cliente)
+      if (!apiKey || apiKey === "") {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Chave Gemini não configurada. Informe sua chave no painel para usar o Criador Viral IA." 
+        });
+      }
+
+      const ai = new GoogleGenerativeAI(apiKey);
+      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
       
       const prompt = `
-      Crie um post de marketing IRRESISTÍVEL para WhatsApp e Instagram.
+      Crie um post de marketing IRRESISTÍVEL para WhatsApp.
       FOCO: DESEJO, FOMO e VENDAS RÁPIDAS.
 
       DADOS DO PRODUTO (USE ESTES DADOS OBRIGATORIAMENTE):
       NOME: "${product.name}"
       DESCRIÇÃO: "${product.description}"
       PREÇO: ${product.price}
-      CATEGORIA: ${product.category}
       LINK DA FOTO: ${shareLink}
 
       REGRAS RÍGIDAS DE CONTEÚDO:
-      1. TÍTULO: O post DEVE começar com o nome do produto: "*${product.name.toUpperCase()}* 🍔" em negrito e destaque.
-      2. PERSUASÃO: Escreva 2 parágrafos curtos descrevendo por que o cliente PRECISA comer isso agora. Fale do sabor, da suculência e da pressa.
-      3. INGREDIENTES: Liste os ingredientes usando emojis ✅.
-      4. PREÇO: Destaque o preço em uma linha separada: "*Valor: ${product.price}*".
-      5. LINK: Adicione o link ${shareLink} no final com a frase "Veja a foto aqui:".
-      6. CTA: Termine com "Clique no link acima para ver a foto real e peça o seu antes que acabe! 🚀🔥".
+      1. TÍTULO: O post DEVE começar com o nome do produto em negrito. Ex: "*X-TUDO ESPECIAL*"
+      2. PERSUASÃO: Escreva 2 parágrafos curtos descrevendo por que o cliente PRECISA comer isso agora. Fale do sabor e suculência.
+      3. INGREDIENTES: Liste os ingredientes usando emojis.
+      4. PREÇO: Destaque o preço em uma linha separada.
+      5. LINK: Adicione o link ${shareLink} no final.
+      6. CTA: Termine com uma chamada forte para ação.
 
       REGRAS VISUAIS:
-      - Use duas quebras de linha entre cada bloco.
+      - Use quebras de linha entre cada bloco.
       - Use negrito (*texto*) no nome do produto e no preço.
-      - NÃO adicione introduções como "Aqui está seu post". Retorne APENAS o conteúdo para copiar.
+      - NÃO adicione introduções. Retorne APENAS o conteúdo.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt
-      });
-
-      const text = response.text;
+      const result = await model.generateContent(prompt);
+      const resp = await result.response;
+      const text = resp.text();
 
       if (!text) {
         throw new Error("A IA retornou um resultado vazio.");
       }
 
-      res.json({ text });
+      return res.json({ text });
     } catch (error: any) {
       console.error("Erro no processamento da IA:", error);
-      res.status(500).json({ 
-        error: error.message || "Erro inesperado ao gerar post via IA." 
+      const errorMessage = error.message?.includes("API_KEY_INVALID") 
+        ? "Sua chave Gemini parece ser inválida. Verifique no console do Google."
+        : (error.message || "Erro inesperado ao gerar post via IA.");
+
+      return res.status(500).json({ 
+        success: false,
+        error: errorMessage
       });
     }
   });
