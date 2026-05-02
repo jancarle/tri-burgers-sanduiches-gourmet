@@ -590,18 +590,35 @@ export default function AdminPanel() {
                         <button 
                           onClick={() => {
                             const product = items.find(i => i.id === selectedProductId);
-                            const isError = generatedPost.startsWith('⚠️');
+                            if (!product) return;
+
                             const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
                             const shareLink = `${baseUrl}/share/${selectedProductId}`;
-                            const textToShare = isError || !generatedPost 
-                              ? `🍔 *${product?.name || 'Delícia do Dia'}*\n\nConfira nosso cardápio e faça seu pedido pelo link:\n\n${shareLink}`
-                              : generatedPost;
+                            
+                            // 1. Limpar texto gerado (remover links que a IA possa ter colocado para evitar duplicação)
+                            let cleanText = generatedPost || "";
+                            if (cleanText.startsWith('⚠️')) cleanText = "";
 
-                            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textToShare)}`, '_blank');
+                            // Fallback caso não tenha texto gerado
+                            if (!cleanText) {
+                                cleanText = product.description.substring(0, 300) || "Peça agora o melhor burger artesanal e pit dog de Goiânia! Qualidade garantida.";
+                            }
+
+                            // Remover links https da IA
+                            cleanText = cleanText.replace(/https?:\/\/[^\s]+/g, '').trim();
+                            
+                            // Garantir texto enxuto (resumido se for muito longo)
+                            if (cleanText.length > 400) {
+                              cleanText = cleanText.substring(0, 397) + "...";
+                            }
+
+                            const finalMessage = `🔥 *${product.name.toUpperCase()}*\n\n${cleanText}\n\n👇 Veja o lanche:\n${shareLink}`;
+                            
+                            window.open(`https://wa.me/?text=${encodeURIComponent(finalMessage)}`, '_blank');
                           }}
                           className="bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 px-2"
                         >
-                          <MessageCircle size={20} /> Direto p/ Zap
+                          <MessageCircle size={20} /> Compartilhar no WhatsApp
                         </button>
                       </div>
                       
