@@ -2,23 +2,11 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/robots.txt",
-      "destination": "/robots.txt"
-    },
-    {
       "source": "/api/gemini/generate-post",
       "destination": "/api/gemini/generate-post.ts"
     },
     {
-      "source": "/api/cloudinary/upload",
-      "destination": "/api/server.ts"
-    },
-    {
-      "source": "/api/health",
-      "destination": "/api/server.ts"
-    },
-    {
-      "source": "/share/:productId",
+      "source": "/api/(.*)",
       "destination": "/api/server.ts"
     },
     {
@@ -26,11 +14,7 @@
       "destination": "/api/server.ts"
     },
     {
-      "source": "/(admin|agency|master-admin)(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/((?!api|assets|favicon.ico|manifest.json|robots.txt).*)$",
+      "source": "/((?!api|assets|favicon.ico|manifest.json|robots.txt|share).*)",
       "destination": "/index.html"
     }
   ]

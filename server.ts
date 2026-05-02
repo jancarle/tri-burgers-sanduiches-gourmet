@@ -165,7 +165,7 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      return res.json({ success: true, message: "Chave configurada com sucesso!" });
+      return res.json({ success: true, configured: true, message: "Chave configurada com sucesso!" });
     } catch (err: any) {
       console.error("Save Key Error:", err);
       return res.status(500).json({ success: false, error: "Erro ao salvar configuração." });

@@ -309,7 +309,7 @@ app.get("/share/:productId", async (req, res) => {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      return res.json({ success: true, message: "Chave configurada com sucesso!" });
+      return res.json({ success: true, configured: true, message: "Chave configurada com sucesso!" });
     } catch (err: any) {
       console.error("Save Key Error:", err);
       return res.status(500).json({ success: false, error: "Erro ao salvar configuração." });

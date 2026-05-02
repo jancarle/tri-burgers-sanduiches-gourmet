@@ -71,7 +71,7 @@ export default function AdminPanel() {
       });
       const data = await resp.json();
       if (data.success) {
-        alert("Chave Gemini salva e protegida com sucesso!");
+        alert("Chave salva com sucesso");
         setGeminiKey('');
         checkGeminiStatus();
       } else {
