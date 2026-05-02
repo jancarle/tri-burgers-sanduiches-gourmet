@@ -408,48 +408,48 @@ export default function AdminPanel() {
           <div className="max-w-4xl mx-auto space-y-8">
             <div className="mb-0 flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold flex items-center gap-2">
+                <h2 className="text-2xl font-black flex items-center gap-2 text-white">
                   Criador Viral IA 
                   <span className="bg-orange-500/20 text-orange-500 text-[10px] px-2 py-0.5 rounded-full border border-orange-500/30 uppercase font-black tracking-widest">Experimental Beta</span>
                 </h2>
-                <p className="text-zinc-400 mt-1">Gere mensagens prontas para WhatsApp com alto potencial de conversão.</p>
+                <p className="text-zinc-100 font-medium mt-1">Gere mensagens prontas para WhatsApp com alto potencial de conversão.</p>
               </div>
               <div className="hidden md:block text-right">
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter block">Status do Recurso</span>
-                <span className={`text-xs font-black ${isPremium ? 'text-green-500' : 'text-red-500'}`}>
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter block">Status do Recurso</span>
+                <span className={`text-sm font-black ${isPremium ? 'text-green-500' : 'text-red-500'}`}>
                   {isPremium ? 'MKT VIRAL ATIVADO' : 'MKT VIRAL BLOQUEADO'}
                 </span>
               </div>
             </div>
 
             {/* Legal Disclaimer / Protection Block */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-500 leading-relaxed space-y-3">
-              <p className="font-bold text-zinc-300 uppercase tracking-tight flex items-center gap-1.5 text-xs">
-                <AlertCircle size={14} className="text-orange-500" /> 
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-100 leading-relaxed space-y-3 shadow-inner">
+              <p className="font-black text-orange-500 uppercase tracking-tight flex items-center gap-1.5 text-xs">
+                <AlertCircle size={14} /> 
                 ⚠️ SOBRE O FUNCIONAMENTO DAS PRÉVIAS NO WHATSAPP
               </p>
-              <p>Este recurso gera textos otimizados e links inteligentes para compartilhamento.</p>
-              <p>
+              <p className="font-medium">Este recurso gera textos otimizados e links inteligentes para compartilhamento.</p>
+              <p className="text-zinc-300">
                 A exibição de imagem (preview) no WhatsApp depende de fatores externos, como:<br />
                 • Processamento do próprio WhatsApp<br />
                 • Cache da plataforma<br />
-                • Tempo de resposta do servidor<br />
-                • Leitura de metadados (Open Graph)
+                • Tempo de resposta do servidor de imagem<br />
+                • Leitura de metadados Open Graph
               </p>
-              <p>Por se tratar de sistemas de terceiros, o funcionamento da prévia pode variar e não pode ser garantido em 100% dos envios.</p>
-              <p className="font-bold text-zinc-400 italic">O sistema continua funcionando normalmente mesmo sem a exibição da imagem.</p>
+              <p className="text-zinc-300">Por se tratar de sistemas de terceiros, o funcionamento da prévia pode variar e não pode ser garantido em 100% dos envios.</p>
+              <p className="font-black text-white italic bg-white/5 w-fit px-2 py-1 rounded">O sistema continua funcionando normalmente mesmo sem a exibição da imagem.</p>
             </div>
 
             {/* AI Config Section - Gemini API Key */}
-            <div className="bg-zinc-800 border border-zinc-700/50 rounded-2xl p-6 shadow-xl relative overflow-hidden space-y-6">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl pointer-events-none" />
+            <div className="bg-zinc-800 border border-zinc-700 rounded-2xl p-6 shadow-2xl relative overflow-hidden space-y-6">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 blur-3xl pointer-events-none" />
                <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                    <h3 className="font-black text-white text-lg mb-2 flex items-center gap-2">
                        <Lock size={18} className="text-orange-500" /> 
                        🤖 IA de Marketing Ativa
                     </h3>
-                    <p className="text-sm text-zinc-400 leading-relaxed">
+                    <p className="text-sm text-zinc-100 font-medium leading-relaxed">
                       O sistema gera automaticamente mensagens persuasivas com base no produto selecionado.<br />
                       O envio e a exibição no WhatsApp seguem o comportamento da própria plataforma.
                     </p>
@@ -457,51 +457,74 @@ export default function AdminPanel() {
                </div>
 
                <div className="border-t border-zinc-700/50 pt-6">
-                 <h3 className="font-bold text-sm text-zinc-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                 <h3 className="font-black text-sm text-zinc-300 uppercase tracking-widest mb-4 flex items-center gap-2">
                    <Key size={16} className="text-orange-500" /> Configuração da API
                  </h3>
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                    <div className="space-y-2">
-                     <label className="text-[10px] text-zinc-500 font-black uppercase">Chave Gemini do Cliente</label>
+                     <label className="text-[10px] text-zinc-100 font-black uppercase">Chave Gemini do Cliente</label>
                      <input 
                        type="password"
                        placeholder="Cole sua chave Gemini aqui..."
                        value={geminiKey}
                        onChange={(e) => setGeminiKey(e.target.value)}
-                       className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                       className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-white text-sm focus:outline-none focus:border-orange-500 transition-colors placeholder:text-zinc-600"
                      />
                    </div>
                    <button 
                      onClick={handleSaveGeminiKey}
                      disabled={!geminiKey || isSavingKey}
-                     className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 text-white font-bold py-3 px-6 rounded-lg transition-all h-[46px] flex items-center justify-center gap-2"
+                     className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 text-white font-black py-3 px-6 rounded-lg transition-all h-[46px] flex items-center justify-center gap-2 shadow-lg active:scale-95"
                    >
                      {isSavingKey ? <RefreshCw size={18} className="animate-spin" /> : "Salvar Chave"}
                    </button>
                  </div>
 
-                 <div className="mt-4 flex items-center gap-2">
-                   <div className={`w-2 h-2 rounded-full ${isGeminiConfigured ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                   <span className="text-[10px] font-bold uppercase tracking-tighter text-zinc-400">
-                     Status: {isGeminiConfigured ? 'Chave configurada e ativa' : 'Chave não configurada'}
-                   </span>
+                 <div className="mt-4 space-y-4">
+                   <div className="flex items-center gap-3 bg-black/40 p-3 rounded-lg border border-zinc-700/30">
+                     <div className={`w-3 h-3 rounded-full ${isGeminiConfigured ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                     <span className={`text-xs font-black uppercase tracking-tight ${isGeminiConfigured ? 'text-green-500' : 'text-red-500'}`}>
+                       {isGeminiConfigured ? '🟢 Chave configurada com sucesso' : '🔴 Chave não configurada'}
+                     </span>
+                   </div>
+
+                   <div className="space-y-3">
+                     <button 
+                       onClick={() => window.open('https://aistudio.google.com/app/apikey', '_blank')}
+                       className="flex items-center gap-2 text-xs font-black text-orange-500 hover:text-orange-400 p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 transition-all uppercase tracking-widest shadow-sm"
+                     >
+                       <Key size={14} /> Obter chave Gemini
+                     </button>
+                     
+                     <p className="text-[11px] text-zinc-100 font-medium leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
+                       Entre com sua conta Google, gere sua chave Gemini e cole aqui no campo acima.<br /><br />
+                       A chave será enviada ao servidor e armazenada de forma criptografada. Por segurança, ela não será exibida novamente após o salvamento.
+                     </p>
+                   </div>
                  </div>
                </div>
 
-               <div className="bg-zinc-900/50 border border-zinc-700 rounded-xl p-5 text-[11px] text-zinc-500 leading-relaxed space-y-3">
-                 <p className="font-bold text-zinc-300 uppercase tracking-tight flex items-center gap-1.5 text-xs">
-                   <Key size={14} className="text-orange-500" /> 
-                   🔑 SOBRE A CHAVE GEMINI
+               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-100 leading-relaxed shadow-inner">
+                 <p className="font-black text-zinc-100 uppercase tracking-tight flex items-center gap-1.5 text-xs mb-3">
+                   <AlertCircle size={14} className="text-orange-500" /> 
+                   ⚠️ SOBRE A API GEMINI
                  </p>
-                 <p>O recurso de IA utiliza a API Gemini do Google. A chave de API deve ser fornecida pelo próprio cliente ou responsável pela loja.</p>
-                 <p>
-                   A disponibilidade, gratuidade, limites de uso, cobrança, quota e funcionamento da API Gemini são definidos pelo Google e podem mudar sem aviso prévio. 
-                   O sistema apenas conecta a chave fornecida pelo cliente ao gerador de conteúdo.
-                 </p>
-                 <p className="text-zinc-400 font-bold">
-                   Não nos responsabilizamos por limite de uso excedido, indisponibilidade da API, alterações de política ou bloqueio da chave.
-                 </p>
+                 <div className="space-y-2 text-zinc-300">
+                   <p>Este recurso utiliza a API Gemini do Google.</p>
+                   <p>A chave deve ser fornecida pelo próprio cliente ou responsável pela loja.</p>
+                   <p>Limites de uso, disponibilidade, gratuidade, cobrança e funcionamento da API são definidos pelo Google e podem mudar sem aviso prévio.</p>
+                   
+                   <div className="pt-2 border-t border-zinc-800">
+                     <p className="font-black text-orange-500 uppercase text-[10px] tracking-widest mb-1">Não nos responsabilizamos por:</p>
+                     <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 list-disc ml-4 font-medium">
+                       <li>Limite de uso excedido</li>
+                       <li>Indisponibilidade da API</li>
+                       <li>Alterações de política ou preço</li>
+                       <li>Bloqueio ou suspensão da chave</li>
+                     </ul>
+                   </div>
+                 </div>
                </div>
             </div>
 
@@ -542,12 +565,12 @@ export default function AdminPanel() {
                     </select>
 
                     {selectedProductId && (
-                      <div className="p-3 bg-zinc-950 border border-zinc-700 rounded-xl">
-                        <p className="text-[10px] text-zinc-500 font-black uppercase mb-1 flex items-center gap-2">
-                          <Share2 size={10} /> Link do Produto (Pronto para Uso)
+                      <div className="p-3 bg-black border border-zinc-800 rounded-xl">
+                        <p className="text-[10px] text-zinc-100 font-black uppercase mb-1 flex items-center gap-2">
+                          <Share2 size={10} className="text-orange-500" /> Link do Produto (Pronto para Uso)
                         </p>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs text-orange-500 flex-1 truncate">{window.location.origin}/share/{selectedProductId}</code>
+                          <code className="text-xs text-orange-500 font-black flex-1 truncate">{window.location.origin}/share/{selectedProductId}</code>
                           <button 
                             onClick={() => {
                               const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
@@ -555,7 +578,7 @@ export default function AdminPanel() {
                               navigator.clipboard.writeText(shareLink);
                               alert('Link do produto copiado!');
                             }}
-                            className="bg-zinc-800 p-2 rounded-lg hover:bg-zinc-700 text-zinc-300 transition-colors"
+                            className="bg-zinc-800 p-2 rounded-lg hover:bg-zinc-700 text-white transition-colors border border-zinc-700"
                             title="Copiar Link"
                           >
                             <Copy size={14} />
@@ -603,13 +626,14 @@ export default function AdminPanel() {
                     </button>
                     
                     <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
-                      <p className="text-xs text-blue-400 leading-relaxed font-bold flex items-center gap-2">
-                        <Sparkles size={14} /> 💡 O texto gerado já está pronto para envio.
+                      <p className="text-xs text-blue-300 leading-relaxed font-black flex items-center gap-2 uppercase tracking-tight">
+                        <Sparkles size={14} className="text-blue-400" /> 💡 Dica de Sucesso
                       </p>
-                      <ul className="text-[10px] text-zinc-400 space-y-1 ml-5 list-disc leading-tight">
-                        <li>Envie o link ao final da mensagem</li>
-                        <li>Evite editar o link</li>
-                        <li>Use o botão "Copiar Texto" para maior compatibilidade</li>
+                      <ul className="text-[10px] text-zinc-100 font-medium space-y-1 ml-5 list-disc leading-tight">
+                        <li>O texto gerado já está otimizado para vendas</li>
+                        <li>Envie o link ao final da mensagem para ativar o preview</li>
+                        <li>Evite editar o link para não quebrar a imagem</li>
+                        <li>Use o botão "Copiar Texto" para compatibilidade total</li>
                       </ul>
                     </div>
                   </div>
