@@ -61,6 +61,11 @@ export default function AdminPanel() {
   };
 
   const handleSaveGeminiKey = async () => {
+    if (!isAgencyOwner) {
+      alert('Acesso restrito à agência.');
+      return;
+    }
+
     if (!geminiKey.trim()) return;
     setIsSavingKey(true);
     try {
@@ -84,7 +89,17 @@ export default function AdminPanel() {
     }
   };
 
-  const isAgencyOwner = user?.email === 'marketingjan@gmail.com';
+  const userEmail = user?.email?.toLowerCase().trim() || '';
+  const isAgencyOwner = userEmail === 'marketingjan@gmail.com';
+  const isClientOperator = userEmail === 'triburgershamburgueria@gmail.com';
+  const isAuthorizedAdmin = isAgencyOwner || isClientOperator;
+
+  // Impede que o cliente operacional force a abertura da aba de marketing.
+  useEffect(() => {
+    if (!isAgencyOwner && activeTab === 'marketing') {
+      setActiveTab('orders');
+    }
+  }, [activeTab, isAgencyOwner]);
 
   const fetchItems = async () => {
     setIsLoadingItems(true);
@@ -127,10 +142,13 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && isAuthorizedAdmin) {
       fetchItems();
       fetchSettings();
-      checkGeminiStatus();
+
+      if (isAgencyOwner) {
+        checkGeminiStatus();
+      }
       
       const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
       const unsub = onSnapshot(q, (snap) => {
@@ -140,7 +158,7 @@ export default function AdminPanel() {
       
       return () => unsub();
     }
-  }, [user]);
+  }, [user, isAgencyOwner, isAuthorizedAdmin]);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -152,6 +170,11 @@ export default function AdminPanel() {
   };
 
   const syncInitialData = async () => {
+    if (!isAgencyOwner) {
+      alert('Acesso restrito à agência.');
+      return;
+    }
+
     try {
       const allItems = [...MENU_ITEMS, ...TRADITIONAL_BURGERS];
       for (const item of allItems) {
@@ -232,6 +255,24 @@ export default function AdminPanel() {
     );
   }
 
+  if (!isAuthorizedAdmin) {
+    return (
+      <div className="min-h-screen bg-zinc-900 text-white flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-zinc-800 p-8 rounded-xl text-center shadow-xl">
+          <h2 className="text-2xl font-bold text-red-500 mb-4">Acesso não autorizado</h2>
+          <p className="text-zinc-400 mb-2">Este e-mail não possui permissão para acessar o painel.</p>
+          <p className="text-sm text-zinc-500 mb-8">{userEmail}</p>
+          <button
+            onClick={() => signOut(auth)}
+            className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-100">
       <header className="bg-zinc-950 p-4 sticky top-0 z-50 shadow-lg border-b border-zinc-800">
@@ -268,15 +309,18 @@ export default function AdminPanel() {
             >
               Cardápio
             </button>
-            <button 
-              onClick={() => setActiveTab('marketing')}
-              className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'marketing' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Marketing IA <Sparkles size={14} className="text-orange-500" />
-            </button>
+            {isAgencyOwner && (
+              <button 
+                onClick={() => setActiveTab('marketing')}
+                className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'marketing' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Marketing IA <Sparkles size={14} className="text-orange-500" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {isAgencyOwner && (
+              <>
                 <Link 
                   to="/agency"
                   title="Painel Master da Agência"
@@ -284,14 +328,16 @@ export default function AdminPanel() {
                 >
                   <Shield className="w-4 h-4" /> [AGÊNCIA] Master
                 </Link>
+
+                <button 
+                  onClick={syncInitialData}
+                  title="Importar produtos do código para o banco de dados (Apenas na 1a vez)"
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" /> Importar
+                </button>
+              </>
             )}
-            <button 
-              onClick={syncInitialData}
-              title="Importar produtos do código para o banco de dados (Apenas na 1a vez)"
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" /> Importar
-            </button>
             <button 
               onClick={() => signOut(auth)}
               className="px-4 py-2 hover:bg-red-500/10 text-red-500 rounded-lg text-sm flex items-center gap-2"
@@ -404,7 +450,7 @@ export default function AdminPanel() {
           </>
         )}
 
-        {activeTab === 'marketing' && (
+        {activeTab === 'marketing' && isAgencyOwner && (
           <div className="max-w-4xl mx-auto space-y-8">
             <div className="mb-0 flex items-center justify-between">
               <div>
@@ -763,8 +809,9 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Seção de Marketing Local (SEO / GMB) -> Manter no fim, global */}
-        <div className="bg-zinc-800 rounded-2xl p-6 md:p-10 border border-zinc-700/50 mt-16 mb-10 overflow-hidden relative">
+        {/* Seção de Marketing Local (SEO / GMB) -> apenas agência */}
+        {isAgencyOwner && (
+          <div className="bg-zinc-800 rounded-2xl p-6 md:p-10 border border-zinc-700/50 mt-16 mb-10 overflow-hidden relative">
               <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 blur-[100px] rounded-full pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center justify-between">
                 <div className="flex-1">
@@ -801,6 +848,7 @@ export default function AdminPanel() {
                 </div>
               </div>
             </div>
+        )}
       </main>
     </div>
   );
