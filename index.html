@@ -14,6 +14,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="language" content="Portuguese" />
+    
+    <script>
+      // Debug fetch assignment error
+      try {
+        var _originalFetch = window.fetch;
+        Object.defineProperty(window, 'fetch', {
+          get: function() { return _originalFetch; },
+          set: function(v) { 
+            console.error('ALERTA: Tentativa de sobrescrever window.fetch detectada!', v);
+            return _originalFetch;
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch (e) {
+        console.warn('Não foi possível definir trap para window.fetch:', e.message);
+      }
+    </script>
 
     <!-- Theme & App Behavior -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -55,7 +73,7 @@
         "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=800"
       ],
       "url": "https://triburgers.com.br/",
-      "telephone": "+5562991778064",
+      "telephone": "+5562994805695",
       "priceRange": "$$",
       "menu": "https://triburgers.com.br/menu",
       "servesCuisine": "Hamburgers, Pit Dog, Brazilian Fast Food",
