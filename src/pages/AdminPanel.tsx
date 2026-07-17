@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, storage } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnapshot, query, orderBy, deleteField } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
 import { MenuItem } from '../types';
 import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { generateMarketingPost } from '../services/geminiService';
 import { processImage } from '../lib/imageUtils';
 
@@ -48,6 +49,8 @@ export default function AdminPanel() {
   // Per-client Gemini Key State
   const [geminiKey, setGeminiKey] = useState('');
   const [isGeminiConfigured, setIsGeminiConfigured] = useState(false);
+  const [configSource, setConfigSource] = useState<'none' | 'database' | 'environment'>('none');
+  const [decryptionFailed, setDecryptionFailed] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
 
   const checkGeminiStatus = async () => {
@@ -55,17 +58,14 @@ export default function AdminPanel() {
       const resp = await fetch('/api/settings/status');
       const data = await resp.json();
       setIsGeminiConfigured(data.isConfigured);
+      setConfigSource(data.type || 'none');
+      setDecryptionFailed(!!data.decryptionFailed);
     } catch (err) {
       console.error("Status check error:", err);
     }
   };
 
   const handleSaveGeminiKey = async () => {
-    if (!isAgencyOwner) {
-      alert('Acesso restrito à agência.');
-      return;
-    }
-
     if (!geminiKey.trim()) return;
     setIsSavingKey(true);
     try {
@@ -76,14 +76,14 @@ export default function AdminPanel() {
       });
       const data = await resp.json();
       if (data.success) {
-        alert("Chave salva com sucesso");
+        toast.success("Chave configurada e salva com sucesso!");
         setGeminiKey('');
         checkGeminiStatus();
       } else {
         throw new Error(data.error);
       }
     } catch (err: any) {
-      alert(`Erro: ${err.message || 'Falha ao salvar chave'}`);
+      toast.error(`Falha: ${err.message || 'Erro ao salvar chave'}`);
     } finally {
       setIsSavingKey(false);
     }
@@ -92,14 +92,6 @@ export default function AdminPanel() {
   const userEmail = user?.email?.toLowerCase().trim() || '';
   const isAgencyOwner = userEmail === 'marketingjan@gmail.com';
   const isClientOperator = userEmail === 'triburgershamburgueria@gmail.com';
-  const isAuthorizedAdmin = isAgencyOwner || isClientOperator;
-
-  // Impede que o cliente operacional force a abertura da aba de marketing.
-  useEffect(() => {
-    if (!isAgencyOwner && activeTab === 'marketing') {
-      setActiveTab('orders');
-    }
-  }, [activeTab, isAgencyOwner]);
 
   const fetchItems = async () => {
     setIsLoadingItems(true);
@@ -142,13 +134,10 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    if (user && isAuthorizedAdmin) {
+    if (user) {
       fetchItems();
       fetchSettings();
-
-      if (isAgencyOwner) {
-        checkGeminiStatus();
-      }
+      checkGeminiStatus();
       
       const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
       const unsub = onSnapshot(q, (snap) => {
@@ -158,7 +147,13 @@ export default function AdminPanel() {
       
       return () => unsub();
     }
-  }, [user, isAgencyOwner, isAuthorizedAdmin]);
+  }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'marketing' && !isAgencyOwner) {
+      setActiveTab('orders');
+    }
+  }, [activeTab, isAgencyOwner]);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -170,11 +165,6 @@ export default function AdminPanel() {
   };
 
   const syncInitialData = async () => {
-    if (!isAgencyOwner) {
-      alert('Acesso restrito à agência.');
-      return;
-    }
-
     try {
       const allItems = [...MENU_ITEMS, ...TRADITIONAL_BURGERS];
       for (const item of allItems) {
@@ -190,13 +180,35 @@ export default function AdminPanel() {
 
   const handleUpdate = async (item: MenuItem) => {
     try {
-      await updateDoc(doc(db, 'menu', item.id), { ...item });
-      alert('Salvo!');
+      const updateData: any = {};
+      
+      // Copy all fields except those that are undefined to avoid Firestore errors
+      Object.entries(item).forEach(([key, val]) => {
+        if (val !== undefined) {
+          updateData[key] = val;
+        }
+      });
+      
+      // Se não houver variações de preço, removemos explicitamente do Firestore
+      if (!item.meatOptions || item.meatOptions.length === 0) {
+        updateData.meatOptions = deleteField();
+      }
+
+      await updateDoc(doc(db, 'menu', item.id), updateData);
+      alert('Salvo com sucesso!');
+
+      // Cria um objeto de item local limpo (sem meatOptions caso tenha sido removida)
+      const updatedLocalItem = { ...item };
+      if (!item.meatOptions || item.meatOptions.length === 0) {
+        delete updatedLocalItem.meatOptions;
+      }
+
       // Atualiza o estado local imediatamente para refletir na tela
-      setItems(prev => prev.map(i => i.id === item.id ? item : i));
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao salvar');
+      setItems(prev => prev.map(i => i.id === item.id ? updatedLocalItem : i));
+    } catch (err: any) {
+      console.error('Erro ao salvar no Firestore:', err);
+      alert('Erro ao salvar as alterações: ' + (err.message || 'Sem permissão'));
+      throw err;
     }
   };
 
@@ -255,18 +267,23 @@ export default function AdminPanel() {
     );
   }
 
-  if (!isAuthorizedAdmin) {
+  const allowedEmails = [
+    'marketingjan@gmail.com',
+    'triburgershamburgueria@gmail.com'
+  ];
+
+  if (user && !allowedEmails.includes(userEmail)) {
     return (
       <div className="min-h-screen bg-zinc-900 text-white flex flex-col items-center justify-center p-4">
         <div className="max-w-md w-full bg-zinc-800 p-8 rounded-xl text-center shadow-xl">
-          <h2 className="text-2xl font-bold text-red-500 mb-4">Acesso não autorizado</h2>
-          <p className="text-zinc-400 mb-2">Este e-mail não possui permissão para acessar o painel.</p>
-          <p className="text-sm text-zinc-500 mb-8">{userEmail}</p>
-          <button
+          <h2 className="text-2xl font-bold text-red-500 mb-6">Acesso Não Autorizado</h2>
+          <p className="text-zinc-500 mb-2 font-mono text-sm">Conectado como: {user.email}</p>
+          <p className="text-zinc-400 mb-8">Este e-mail não possui permissão para acessar o painel de administração da Tri Burgers.</p>
+          <button 
             onClick={() => signOut(auth)}
-            className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+            className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors"
           >
-            Sair
+            Sair e Alternar Conta
           </button>
         </div>
       </div>
@@ -328,7 +345,6 @@ export default function AdminPanel() {
                 >
                   <Shield className="w-4 h-4" /> [AGÊNCIA] Master
                 </Link>
-
                 <button 
                   onClick={syncInitialData}
                   title="Importar produtos do código para o banco de dados (Apenas na 1a vez)"
@@ -458,7 +474,7 @@ export default function AdminPanel() {
                   Criador Viral IA 
                   <span className="bg-orange-500/20 text-orange-500 text-[10px] px-2 py-0.5 rounded-full border border-orange-500/30 uppercase font-black tracking-widest">Experimental Beta</span>
                 </h2>
-                <p className="text-zinc-100 font-medium mt-1">Gere mensagens prontas para WhatsApp com alto potencial de conversão.</p>
+                <p className="text-white font-medium mt-1">Gere mensagens prontas para WhatsApp com alto potencial de conversão.</p>
               </div>
               <div className="hidden md:block text-right">
                 <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter block">Status do Recurso</span>
@@ -469,20 +485,20 @@ export default function AdminPanel() {
             </div>
 
             {/* Legal Disclaimer / Protection Block */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-100 leading-relaxed space-y-3 shadow-inner">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-gray-200 leading-relaxed space-y-3 shadow-inner">
               <p className="font-black text-orange-500 uppercase tracking-tight flex items-center gap-1.5 text-xs">
                 <AlertCircle size={14} /> 
                 ⚠️ SOBRE O FUNCIONAMENTO DAS PRÉVIAS NO WHATSAPP
               </p>
-              <p className="font-medium">Este recurso gera textos otimizados e links inteligentes para compartilhamento.</p>
-              <p className="text-zinc-300">
+              <p className="font-medium text-white">Este recurso gera textos otimizados e links inteligentes para compartilhamento.</p>
+              <p className="text-gray-300">
                 A exibição de imagem (preview) no WhatsApp depende de fatores externos, como:<br />
                 • Processamento do próprio WhatsApp<br />
                 • Cache da plataforma<br />
                 • Tempo de resposta do servidor de imagem<br />
                 • Leitura de metadados Open Graph
               </p>
-              <p className="text-zinc-300">Por se tratar de sistemas de terceiros, o funcionamento da prévia pode variar e não pode ser garantido em 100% dos envios.</p>
+              <p className="text-gray-300">Por se tratar de sistemas de terceiros, o funcionamento da prévia pode variar e não pode ser garantido em 100% dos envios.</p>
               <p className="font-black text-white italic bg-white/5 w-fit px-2 py-1 rounded">O sistema continua funcionando normalmente mesmo sem a exibição da imagem.</p>
             </div>
 
@@ -495,7 +511,7 @@ export default function AdminPanel() {
                        <Lock size={18} className="text-orange-500" /> 
                        🤖 IA de Marketing Ativa
                     </h3>
-                    <p className="text-sm text-zinc-100 font-medium leading-relaxed">
+                    <p className="text-sm text-gray-200 font-semibold leading-relaxed">
                       O sistema gera automaticamente mensagens persuasivas com base no produto selecionado.<br />
                       O envio e a exibição no WhatsApp seguem o comportamento da própria plataforma.
                     </p>
@@ -509,7 +525,7 @@ export default function AdminPanel() {
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                    <div className="space-y-2">
-                     <label className="text-[10px] text-zinc-100 font-black uppercase">Chave Gemini do Cliente</label>
+                     <label className="text-[10px] text-white font-black uppercase">Chave Gemini do Cliente</label>
                      <input 
                        type="password"
                        placeholder="Cole sua chave Gemini aqui..."
@@ -527,14 +543,30 @@ export default function AdminPanel() {
                    </button>
                  </div>
 
-                 <div className="mt-4 space-y-4">
-                   <div className="flex items-center gap-3 bg-black/40 p-3 rounded-lg border border-zinc-700/30">
-                     <div className={`w-3 h-3 rounded-full ${isGeminiConfigured ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
-                     <span className={`text-xs font-black uppercase tracking-tight ${isGeminiConfigured ? 'text-green-500' : 'text-red-500'}`}>
-                       {isGeminiConfigured ? '🟢 Chave configurada com sucesso' : '🔴 Chave não configurada'}
-                     </span>
-                   </div>
+                 <div className="flex flex-col gap-2 bg-black/40 p-4 rounded-xl border border-zinc-700/30">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${isGeminiConfigured ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                      <span className={`text-xs font-black uppercase tracking-tight ${isGeminiConfigured ? 'text-green-500' : 'text-red-500'}`}>
+                        {isGeminiConfigured ? '🟢 Chave Configurada' : (decryptionFailed ? '⚠️ Erro de Versão' : '🔴 Chave Não Encontrada')}
+                      </span>
+                    </div>
+                    
+                    {decryptionFailed && (
+                      <div className="text-[10px] bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-200 font-bold leading-tight uppercase flex items-start gap-2">
+                        <AlertCircle size={14} className="shrink-0" />
+                        <span>Sua chave foi salva em outro ambiente (ex: Vercel). Para usar aqui no Preview, COLE E SALVE A CHAVE NOVAMENTE abaixo.</span>
+                      </div>
+                    )}
 
+                    {isGeminiConfigured && !decryptionFailed && (
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800 flex items-center gap-2">
+                        <Info size={12} className="text-orange-500" />
+                        <span>Status: {configSource === 'environment' ? 'Modo Produção (Vercel ENV)' : 'Modo Cliente (Banco de Dados)'}</span>
+                      </div>
+                    )}
+                 </div>
+
+                 <div className="mt-4 space-y-4">
                    <div className="space-y-3">
                      <button 
                        onClick={() => window.open('https://aistudio.google.com/app/apikey', '_blank')}
@@ -550,26 +582,26 @@ export default function AdminPanel() {
                    </div>
                  </div>
                </div>
+            </div>
 
-               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-100 leading-relaxed shadow-inner">
-                 <p className="font-black text-zinc-100 uppercase tracking-tight flex items-center gap-1.5 text-xs mb-3">
-                   <AlertCircle size={14} className="text-orange-500" /> 
-                   ⚠️ SOBRE A API GEMINI
-                 </p>
-                 <div className="space-y-2 text-zinc-300">
-                   <p>Este recurso utiliza a API Gemini do Google.</p>
-                   <p>A chave deve ser fornecida pelo próprio cliente ou responsável pela loja.</p>
-                   <p>Limites de uso, disponibilidade, gratuidade, cobrança e funcionamento da API são definidos pelo Google e podem mudar sem aviso prévio.</p>
-                   
-                   <div className="pt-2 border-t border-zinc-800">
-                     <p className="font-black text-orange-500 uppercase text-[10px] tracking-widest mb-1">Não nos responsabilizamos por:</p>
-                     <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 list-disc ml-4 font-medium">
-                       <li>Limite de uso excedido</li>
-                       <li>Indisponibilidade da API</li>
-                       <li>Alterações de política ou preço</li>
-                       <li>Bloqueio ou suspensão da chave</li>
-                     </ul>
-                   </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-[11px] text-zinc-100 leading-relaxed shadow-inner">
+               <p className="font-black text-zinc-100 uppercase tracking-tight flex items-center gap-1.5 text-xs mb-3">
+                 <AlertCircle size={14} className="text-orange-500" /> 
+                 ⚠️ SOBRE A API GEMINI
+               </p>
+               <div className="space-y-2 text-zinc-300">
+                 <p>Este recurso utiliza a API Gemini do Google.</p>
+                 <p>A chave deve ser fornecida pelo próprio cliente ou responsável pela loja.</p>
+                 <p>Limites de uso, disponibilidade, gratuidade, cobrança e funcionamento da API são definidos pelo Google e podem mudar sem aviso prévio.</p>
+                 
+                 <div className="pt-2 border-t border-zinc-800">
+                   <p className="font-black text-orange-500 uppercase text-[10px] tracking-widest mb-1">Não nos responsabilizamos por:</p>
+                   <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 list-disc ml-4 font-medium">
+                     <li>Limite de uso excedido</li>
+                     <li>Indisponibilidade da API</li>
+                     <li>Alterações de política ou preço</li>
+                     <li>Bloqueio ou suspensão da chave</li>
+                   </ul>
                  </div>
                </div>
             </div>
@@ -582,7 +614,7 @@ export default function AdminPanel() {
                   Este recurso faz parte do módulo premium. Entre em contato com a agência para liberar o acesso e gerar posts irresistíveis.
                 </p>
                 <button 
-                   onClick={() => window.open('https://wa.me/5562991778064?text=Olá!%20Gostaria%20de%20pedir%20atualização%20do%20plano%20e%20a%20liberação%20do%20recurso%20de%20Marketing%20Viral', '_blank')}
+                   onClick={() => window.open('https://wa.me/5562994805695?text=Olá!%20Gostaria%20de%20pedir%20atualização%20do%20plano%20e%20a%20liberação%20do%20recurso%20de%20Marketing%20Viral', '_blank')}
                    className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg transition-all"
                 >
                   Falar com Suporte
@@ -612,7 +644,7 @@ export default function AdminPanel() {
 
                     {selectedProductId && (
                       <div className="p-3 bg-black border border-zinc-800 rounded-xl">
-                        <p className="text-[10px] text-zinc-100 font-black uppercase mb-1 flex items-center gap-2">
+                        <p className="text-[10px] text-white font-black uppercase mb-1 flex items-center gap-2">
                           <Share2 size={10} className="text-orange-500" /> Link do Produto (Pronto para Uso)
                         </p>
                         <div className="flex items-center gap-2">
@@ -809,45 +841,45 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Seção de Marketing Local (SEO / GMB) -> apenas agência */}
+        {/* Seção de Marketing Local (SEO / GMB) -> Manter no fim, global apenas para agência */}
         {isAgencyOwner && (
           <div className="bg-zinc-800 rounded-2xl p-6 md:p-10 border border-zinc-700/50 mt-16 mb-10 overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 blur-[100px] rounded-full pointer-events-none" />
-              <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-yellow-500/20 text-yellow-500 rounded-xl flex items-center justify-center">
-                      <Star size={24} />
-                    </div>
-                    <h2 className="text-2xl font-bold">Kit de Marketing Local</h2>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 blur-[100px] rounded-full pointer-events-none" />
+            <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-yellow-500/20 text-yellow-500 rounded-xl flex items-center justify-center">
+                    <Star size={24} />
                   </div>
-                  <p className="text-zinc-400 mb-6 max-w-lg">
-                    Acelere suas avaliações no <strong>Google Meu Negócio</strong>. Use este QR Code nas mesas físicas do Pit Dog ou imprima para colocar nas sacolas de Delivery. Clientes satisfeitos avaliando aumentam suas vendas!
-                  </p>
-                  
-                  <div className="flex gap-4">
-                    <a 
-                      href="https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=https://g.page/r/CTufWNHrYHk6EAE/review" 
-                      download="tri-burgers-qr-code.png"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white text-black px-5 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-zinc-200 transition-colors"
-                    >
-                      <Download size={18} /> Baixar QR Code (Alta Qualidade)
-                    </a>
-                  </div>
+                  <h2 className="text-2xl font-bold">Kit de Marketing Local</h2>
                 </div>
-
-                <div className="bg-white p-4 rounded-2xl shadow-2xl shrink-0">
-                  <img 
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://g.page/r/CTufWNHrYHk6EAE/review" 
-                    alt="QR Code de Avaliação"
-                    className="w-48 h-48 rounded-lg"
-                  />
-                  <p className="text-black text-center text-xs font-bold mt-3 uppercase tracking-widest">Avalie-nos no Google</p>
+                <p className="text-zinc-400 mb-6 max-w-lg">
+                  Acelere suas avaliações no <strong>Google Meu Negócio</strong>. Use este QR Code nas mesas físicas do Pit Dog ou imprima para colocar nas sacolas de Delivery. Clientes satisfeitos avaliando aumentam suas vendas!
+                </p>
+                
+                <div className="flex gap-4">
+                  <a 
+                    href="https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=https://g.page/r/CTufWNHrYHk6EAE/review" 
+                    download="tri-burgers-qr-code.png"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-white text-black px-5 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-zinc-200 transition-colors"
+                  >
+                    <Download size={18} /> Baixar QR Code (Alta Qualidade)
+                  </a>
                 </div>
               </div>
+
+              <div className="bg-white p-4 rounded-2xl shadow-2xl shrink-0">
+                <img 
+                  src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://g.page/r/CTufWNHrYHk6EAE/review" 
+                  alt="QR Code de Avaliação"
+                  className="w-48 h-48 rounded-lg"
+                />
+                <p className="text-black text-center text-xs font-bold mt-3 uppercase tracking-widest">Avalie-nos no Google</p>
+              </div>
             </div>
+          </div>
         )}
       </main>
     </div>
@@ -866,7 +898,7 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
   const [draft, setDraft] = useState(item);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const normalizedUrl = normalizeImageUrl(draft.image || "");
     
     // Validations
@@ -886,8 +918,13 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
       image: normalizedUrl
     };
     
-    onUpdate(updatedItem);
-    setEditing(false);
+    try {
+      await onUpdate(updatedItem);
+      setEditing(false);
+    } catch (e: any) {
+      console.error("Erro capturado ao salvar no ProductCard:", e);
+      // O erro já gerou um alert() no handleUpdate, então apenas mantemos a tela aberta
+    }
   };
 
   const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -896,7 +933,10 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
 
     // Client-side validation
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-    if (!allowedTypes.includes(file.type)) {
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const isAllowedExtension = ['jpg', 'jpeg', 'png'].includes(fileExtension || '');
+    
+    if (!allowedTypes.includes(file.type) && !isAllowedExtension) {
       alert("Erro: Apenas imagens JPG ou PNG são permitidas.");
       return;
     }
@@ -929,14 +969,26 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
 
       if (data.success && data.imageUrl) {
         console.log(`[CLOUDINARY] Sucesso! URL: ${data.imageUrl}`);
-        setDraft(prev => ({ ...prev, image: data.imageUrl }));
-        alert("Imagem enviada com sucesso ao Cloudinary!");
+        
+        // 5. Aplicar URL ao produto
+        const updatedItem = {
+          ...draft,
+          price: Number(draft.price),
+          image: data.imageUrl
+        };
+        setDraft(updatedItem);
+        
+        // 6. Salvar produto no Firestore imediatamente
+        await onUpdate(updatedItem);
+
+        // 7. Exibir sucesso somente após upload e salvamento concluídos
+        alert("Imagem enviada ao Cloudinary e salva no produto com sucesso!");
       } else {
         throw new Error(data.error || "Erro desconhecido no servidor.");
       }
     } catch (err: any) {
       console.error("[CLOUDINARY] ERRO:", err);
-      alert(`Não foi possível enviar a imagem. Tente novamente com JPG ou PNG menor que 2MB.\n${err.message || ""}`);
+      alert(`Não foi possível enviar ou salvar a imagem. Tente novamente com JPG ou PNG menor que 2MB.\n${err.message || ""}`);
     } finally {
       setIsUploading(false);
       console.log("[CLOUDINARY] Fluxo finalizado.");
@@ -1071,43 +1123,115 @@ function ProductCard({ item, onUpdate, onDelete }: ProductCardProps) {
               </div>
             </div>
 
-            {draft.meatOptions && (
-              <div className="mt-2 bg-zinc-900/50 p-3 rounded border border-zinc-700">
-                <label className="text-xs text-orange-400 font-bold mb-2 block">Opções de Carne (Sanduíches Tradicionais)</label>
-                <div className="space-y-2">
+            {/* Seção de Variações de Preço (Opções do Produto) */}
+            <div className="mt-2 bg-zinc-900/50 p-4 rounded-xl border border-zinc-700/50">
+              <div className="flex items-center justify-between mb-3 border-b border-zinc-800 pb-2">
+                <label className="text-xs font-black uppercase text-orange-400 tracking-wider flex items-center gap-1.5">
+                  Variações de Preço / Opções (Opcional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentOptions = draft.meatOptions ? [...draft.meatOptions] : [];
+                    currentOptions.push({ name: '', price: draft.price || 0 });
+                    const val = { ...draft, meatOptions: currentOptions };
+                    
+                    // Auto-update price text if applicable
+                    const prices = currentOptions.map(o => o.price).filter(p => p > 0);
+                    if (prices.length > 0) {
+                      const minPrice = Math.min(...prices);
+                      val.priceText = `A partir de R$ ${minPrice.toFixed(2)}`;
+                    } else if (val.price > 0) {
+                      val.priceText = `A partir de R$ ${val.price.toFixed(2)}`;
+                    }
+                    setDraft(val);
+                  }}
+                  className="flex items-center gap-1 text-[10px] bg-red-600 hover:bg-red-500 text-white font-black px-2 py-1 rounded transition-colors uppercase tracking-widest cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" /> Add Var.
+                </button>
+              </div>
+
+              {draft.meatOptions && draft.meatOptions.length > 0 ? (
+                <div className="space-y-3">
                   {draft.meatOptions.map((opt, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <input className="w-2/3 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs text-zinc-400" value={opt.name} disabled title={opt.name} />
-                      <input 
-                         type="number" step="0.01"
-                         className="w-1/3 bg-zinc-900 border border-red-900 rounded p-2 text-xs text-white"
-                         value={opt.price} 
-                         onChange={e => {
-                           const newOptions = [...draft.meatOptions!];
-                           newOptions[i].price = Number(e.target.value);
-                           if (i === 0) {
-                             setDraft({...draft, meatOptions: newOptions, price: newOptions[0].price, priceText: `A partir de R$ ${newOptions[0].price.toFixed(2)}`});
-                           } else {
-                             setDraft({...draft, meatOptions: newOptions});
-                           }
-                         }}
-                      />
+                    <div key={i} className="flex gap-2 items-center bg-zinc-950/40 p-2 rounded border border-zinc-800">
+                      <div className="flex-1">
+                        <label className="text-[9px] uppercase font-black text-zinc-500 tracking-wider">Nome da Opção</label>
+                        <input
+                          type="text"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                          placeholder="Ex: 100g Filé de Frango"
+                          value={opt.name || ''}
+                          onChange={e => {
+                            const newOptions = [...draft.meatOptions!];
+                            newOptions[i] = { ...newOptions[i], name: e.target.value };
+                            setDraft({ ...draft, meatOptions: newOptions });
+                          }}
+                        />
+                      </div>
+                      <div className="w-24">
+                        <label className="text-[9px] uppercase font-black text-zinc-500 tracking-wider">Preço (R$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white focus:outline-none focus:border-red-500"
+                          value={opt.price === undefined || opt.price === null ? '' : opt.price}
+                          onChange={e => {
+                            const newOptions = [...draft.meatOptions!];
+                            newOptions[i] = { ...newOptions[i], price: Number(e.target.value) };
+                            
+                            const val = { ...draft, meatOptions: newOptions };
+                            const prices = newOptions.map(o => o.price).filter(p => p > 0);
+                            if (prices.length > 0) {
+                              const minPrice = Math.min(...prices);
+                              val.priceText = `A partir de R$ ${minPrice.toFixed(2)}`;
+                            }
+                            setDraft(val);
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newOptions = draft.meatOptions!.filter((_, idx) => idx !== i);
+                          const updatedOptions = newOptions.length > 0 ? newOptions : undefined;
+                          const val = { ...draft, meatOptions: updatedOptions };
+                          if (!updatedOptions) {
+                            val.priceText = '';
+                          } else {
+                            const prices = updatedOptions.map(o => o.price).filter(p => p > 0);
+                            if (prices.length > 0) {
+                              const minPrice = Math.min(...prices);
+                              val.priceText = `A partir de R$ ${minPrice.toFixed(2)}`;
+                            }
+                          }
+                          setDraft(val);
+                        }}
+                        className="text-zinc-500 hover:text-red-500 p-1.5 mt-4 transition-colors cursor-pointer"
+                        title="Remover variação"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[10px] text-zinc-500 text-center italic py-2">
+                  Nenhuma variação adicionada. O produto usará apenas o preço base.
+                </p>
+              )}
+            </div>
 
-            {!draft.meatOptions && (
-              <div>
-                <label className="text-xs text-zinc-400">Texto de Preço Alternativo</label>
-                <input 
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white" 
-                  placeholder='ex: "Consulte" ou "A partir de R$ 10"'
-                  value={draft.priceText || ''} onChange={e => setDraft({...draft, priceText: e.target.value})} 
-                />
-              </div>
-            )}
+            <div>
+              <label className="text-xs text-zinc-400">Texto de Preço Alternativo (Opcional)</label>
+              <input 
+                className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-white focus:outline-none focus:border-red-500" 
+                placeholder='ex: "Sob Consulta" ou "A partir de R$ 10"'
+                value={draft.priceText || ''} 
+                onChange={e => setDraft({...draft, priceText: e.target.value})} 
+              />
+            </div>
 
             <div>
               <label className="text-xs text-zinc-400">Descrição/Ingredientes</label>

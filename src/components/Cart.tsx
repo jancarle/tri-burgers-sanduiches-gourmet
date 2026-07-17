@@ -27,7 +27,7 @@ export default function Cart() {
     
     setFormError('');
 
-    let message = `*🍔 NOVO PEDIDO ONLINE*\n---------------------------\n\n`;
+    let message = `*🍔 Pedido recebido no WhatsApp*\n---------------------------\n\n`;
     
     cart.forEach(item => {
       const itemPrice = item.selectedOption ? item.selectedOption.price : item.price;

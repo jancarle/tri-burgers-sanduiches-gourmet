@@ -39,7 +39,7 @@ export async function generateMarketingPost(product: {
     return data.text;
   } catch (error: any) {
     console.error("Erro no Gerador de Post:", error);
-    // Retornamos uma mensagem amigável que será exibida no lugar do post
-    return `⚠️ Não foi possível gerar o post agora.\n\nMotivo: ${error.message || "Erro de conexão"}\n\nPor favor, garanta que a GEMINI_API_KEY está configurada na Vercel e tente novamente.`;
+    // Retornamos uma mensagem que será exibida no lugar do post
+    return `⚠️ OOPS! ALGO DEU ERRADO:\n\n${error.message || "Erro de conexão com a IA"}\n\n💡 Dica: Verifique se sua chave tem créditos e se foi salva corretamente.`;
   }
 }

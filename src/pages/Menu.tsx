@@ -65,44 +65,40 @@ export default function Menu() {
 
   return (
     <div className="bg-black text-white font-sans">
-      {/* Header */}
-      <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
-        <div className="text-center mb-8 md:mb-16">
-          <motion.span 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-red-600 font-black tracking-[0.4em] uppercase text-[10px] md:text-sm mb-4 block"
-          >
-            Experiência Gastronômica
-          </motion.span>
-          <h1 className="text-5xl sm:text-6xl md:text-[9rem] font-black tracking-tighter uppercase mb-4 md:mb-8 leading-[0.85] italic">
-            CARDÁPIO <br /><span className="text-red-600 not-italic">SUPREMO.</span>
-          </h1>
-          
-          {/* Subheadline */}
-          <h2 className="text-lg sm:text-2xl md:text-3xl text-gray-400 font-bold max-w-2xl mx-auto italic px-4">
-            O que você deseja devorar hoje?
-          </h2>
-        </div>
+      {/* CARDÁPIO SUPREMO HEADER */}
+      <div className="max-w-7xl mx-auto px-4 pt-16 pb-8 md:pt-24 md:pb-12 text-center">
+        <motion.span 
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          className="text-red-600 font-black tracking-[0.4em] uppercase text-[10px] md:text-sm mb-4 block"
+        >
+          EXPERIÊNCIA GASTRONÔMICA
+        </motion.span>
+        <h1 className="text-6xl sm:text-7xl md:text-[10rem] font-black tracking-tighter uppercase leading-[0.8] italic mb-6">
+          CARDÁPIO <br /><span className="text-red-600 not-italic">SUPREMO.</span>
+        </h1>
+        <p className="text-lg md:text-2xl text-gray-400 font-bold italic mb-12">
+          O que você deseja devorar hoje?
+        </p>
 
-        {/* Categories (Sticky Navbar wrapper) */}
-        <div className="sticky top-[70px] z-30 bg-black/90 backdrop-blur-xl py-4 mb-12 border-b border-white/5 mx-[-1rem] px-4 md:mx-0 md:px-0 md:rounded-[2rem] md:border md:border-white/10 shadow-2xl">
-            <div className="flex flex-wrap justify-center gap-2 md:gap-4 items-center pb-2 md:pb-0 px-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => scrollToCategory(cat)}
-                  className="px-4 py-2 md:px-6 md:py-3 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all bg-zinc-900 text-gray-400 border border-white/5 hover:border-red-600/50 hover:text-white"
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+        {/* Category Quick Links - Improved Design */}
+        <div className="sticky top-[80px] z-30 bg-black/95 backdrop-blur-xl py-6 border border-white/5 rounded-[2.5rem] shadow-2xl mb-16 overflow-hidden">
+          <div className="flex flex-wrap justify-center gap-3 px-4 overflow-x-auto no-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => scrollToCategory(cat)}
+                className="px-6 py-3 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all bg-zinc-900 text-gray-400 border border-white/5 hover:border-red-600 hover:text-white whitespace-nowrap"
+              >
+                {cat}
+              </button>
+            ))}
           </div>
+        </div>
       </div>
 
       {/* Grid */}
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4 pb-24">
         {categories.map((cat) => {
           const catId = `cat-${cat.replace(/\s+/g, '-').toLowerCase()}`;
           const categoryItems = allItems.filter(item => item.category === cat);
@@ -171,9 +167,11 @@ export default function Menu() {
                             <span className="text-red-500 font-black tracking-widest text-lg">{item.priceText || `R$ ${item.price.toFixed(2)}`}</span>
                           </div>
                         )}
-                        {item.meatOptions && (
+                        {item.meatOptions && item.meatOptions.length > 0 && (
                           <div className="space-y-2 mt-6 border-t border-white/10 pt-6">
-                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Selecione a Carne e Adicione:</p>
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">
+                              {item.category === 'Sanduíches Tradicionais' ? 'Selecione a Carne e Adicione:' : 'Selecione a Opção e Adicione:'}
+                            </p>
                             {item.meatOptions.map((opt, i) => (
                               <button
                                 key={i}
@@ -200,7 +198,7 @@ export default function Menu() {
                           </p>
                         )}
                       </div>
-                      {!item.meatOptions && (
+                      {(!item.meatOptions || item.meatOptions.length === 0) && (
                         <button
                           onClick={() => addToCart(item)}
                           disabled={item.available === false}

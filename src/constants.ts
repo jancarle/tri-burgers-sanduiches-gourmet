@@ -39,7 +39,7 @@ export const BUTTON_TEXTS = {
 };
 
 export const WHATSAPP_CONFIG = {
-  number: '5562991778064',
+  number: '5562994805695',
   baseUrl: 'https://api.whatsapp.com/send'
 };
 

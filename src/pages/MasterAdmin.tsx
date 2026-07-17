@@ -65,7 +65,7 @@ export default function MasterAdmin() {
   };
 
   // Se não for o admin master, exibe erro
-  if (!loading && user?.email !== 'marketingjan@gmail.com') {
+  if (!loading && user?.email?.toLowerCase().trim() !== 'marketingjan@gmail.com') {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
         <Shield size={64} className="text-red-500 mb-4" />

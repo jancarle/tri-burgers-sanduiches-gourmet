@@ -7,8 +7,8 @@ export default function Contact() {
   const whatsappUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}`;
 
   return (
-    <div className="bg-black text-white font-sans">
-      <div className="max-w-7xl mx-auto px-4 pb-8 md:py-16">
+    <div className="bg-black text-white font-sans py-24 border-t border-white/5">
+      <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16 md:mb-24">
           <motion.span 
             initial={{ opacity: 0 }}
@@ -40,7 +40,7 @@ export default function Contact() {
                   <MessageCircle size={40} />
                 </div>
                 <h3 className="text-2xl font-black uppercase mb-2">WhatsApp</h3>
-                <p className="text-gray-400 font-mono text-lg">(62) 99177-8064</p>
+                <p className="text-gray-400 font-mono text-lg">(62) 99480-5695</p>
                 <p className="mt-4 text-[10px] font-black text-green-500 uppercase tracking-widest">Resposta em 2 min</p>
               </a>
 

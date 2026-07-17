@@ -3,22 +3,22 @@ import { History, Heart, Users, Award } from 'lucide-react';
 
 export default function About() {
   return (
-    <div className="bg-black text-white font-sans">
-      {/* Hero */}
-      <section className="relative pb-12 md:py-32 overflow-hidden">
+    <div className="bg-zinc-950 text-white font-sans">
+      {/* FORJADOS NO FOGO E SABOR HEADER */}
+      <section className="relative pt-24 pb-16 md:pt-40 md:pb-24 overflow-hidden border-b border-white/5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#dc2626_0%,transparent_70%)] opacity-10" />
         <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
           <motion.span 
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-red-600 font-black tracking-[0.4em] uppercase text-[10px] md:text-sm"
+            whileInView={{ opacity: 1 }}
+            className="text-red-600 font-black tracking-[0.4em] uppercase text-[10px] md:text-sm mb-6 block"
           >
-            A Lenda Tri Burgers
+            A LENDA TRI BURGERS
           </motion.span>
           <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter uppercase mt-4 md:mt-6 mb-4 md:mb-8 leading-[0.8] italic"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            className="text-6xl sm:text-7xl md:text-[10rem] font-black tracking-tighter uppercase leading-[0.8] italic"
           >
             FORJADOS NO <br /><span className="text-red-600 not-italic">FOGO E SABOR.</span>
           </motion.h1>
@@ -26,7 +26,7 @@ export default function About() {
       </section>
 
       {/* Story Content */}
-      <section className="py-12 md:py-24" aria-labelledby="story-title">
+      <section className="py-24" aria-labelledby="story-title">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 md:gap-24 items-center">
             <div className="relative group mx-auto w-full max-w-sm md:max-w-full">

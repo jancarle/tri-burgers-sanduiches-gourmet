@@ -70,7 +70,7 @@ export default function Footer() {
             <ul className="space-y-6 text-gray-400">
               <li className="flex flex-col gap-1 items-center md:items-start" itemProp="telephone">
                 <span className="text-[10px] uppercase tracking-widest text-gray-400">Telefone / Delivery</span>
-                <span className="font-mono text-lg text-white font-bold">(62) 99177-8064</span>
+                <span className="font-mono text-lg text-white font-bold">(62) 99480-5695</span>
               </li>
               <li className="flex flex-col gap-1 items-center md:items-start" itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
                 <span className="text-[10px] uppercase tracking-widest text-gray-400">Endereço</span>

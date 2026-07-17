@@ -60,10 +60,10 @@ function LandingPage() {
     <div className="min-h-screen bg-black flex flex-col">
       <Navbar />
       <main className="flex-grow">
-        <div id="home"><Home /></div>
-        <div id="cardapio"><Menu /></div>
-        <div id="sobre"><About /></div>
-        <div id="contato"><Contact /></div>
+        <div id="home" className="scroll-mt-20"><Home /></div>
+        <div id="cardapio" className="scroll-mt-20"><Menu /></div>
+        <div id="sobre" className="scroll-mt-20"><About /></div>
+        <div id="contato" className="scroll-mt-20"><Contact /></div>
       </main>
       <Footer />
       <WhatsAppButton />
