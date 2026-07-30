@@ -4,7 +4,7 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import path from "path";
 import dotenv from "dotenv";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import crypto from 'crypto';
@@ -153,7 +153,11 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
       }
 
       if (!adminInitialized) {
-        return res.status(500).json({ success: false, error: "Serviço de banco de dados indisponível." });
+        console.error("Tentativa de salvar chave Gemini sem Firebase Admin configurado.");
+        return res.status(500).json({ 
+          success: false, 
+          error: "Não foi possível salvar no banco de dados. Verifique a variável FIREBASE_SERVICE_ACCOUNT no Painel da Vercel. No entanto, se você já configurou a GEMINI_API_KEY diretamente na Vercel, ela já deve estar funcionando." 
+        });
       }
 
       const encryptedKey = encrypt(key.trim());
@@ -168,21 +172,66 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
       return res.json({ success: true, configured: true, message: "Chave configurada com sucesso!" });
     } catch (err: any) {
       console.error("Save Key Error:", err);
-      return res.status(500).json({ success: false, error: "Erro ao salvar configuração." });
+      const detailedError = err.message || String(err);
+      let userFriendlyError = `Erro ao salvar: ${detailedError}.`;
+      
+      if (detailedError.includes("UNAUTHENTICATED") || detailedError.includes("16")) {
+        userFriendlyError = "Erro 16 (Não Autenticado): O JSON da sua 'FIREBASE_SERVICE_ACCOUNT' foi recusado pelo Google. \n\nSOLUÇÃO:\n1. Vá no Console do Firebase > Configurações > Contas de Serviço.\n2. Gere uma NOVA chave privada.\n3. Copie o JSON INTEIRO e cole aqui nas Settings deste ambiente.";
+      }
+
+      return res.status(500).json({ 
+        success: false, 
+        error: userFriendlyError 
+      });
     }
   });
 
-  // Rota para verificar status da chave Gemini
+  // Rota para verificar status da chave Gemini - Melhora visibilidade do ambiente (Vercel)
   app.get("/api/settings/status", async (req, res) => {
     try {
-      if (!adminInitialized) return res.json({ isConfigured: false });
+      // Prioridade 1: Variável de ambiente (Vercel/AI Studio)
+      // Nota: No AI Studio process.env.GEMINI_API_KEY geralmente está presente
+      const isConfiguredInEnv = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10;
+      
+      if (!adminInitialized) {
+        return res.json({ 
+          isConfigured: isConfiguredInEnv, 
+          type: isConfiguredInEnv ? 'environment' : 'none',
+          message: isConfiguredInEnv ? 'Usando chave do Ambiente (Vercel/Sistema)' : 'Nenhuma chave encontrada'
+        });
+      }
       
       const db = getFirestore(DATABASE_ID);
       const doc = await db.collection("settings").doc("gemini").get();
+      let isConfiguredInDB = false;
+      let decryptionFailed = false;
       
-      return res.json({ isConfigured: doc.exists && !!doc.data()?.encryptedKey });
+      if (doc.exists) {
+        const encrypted = doc.data()?.encryptedKey;
+        if (encrypted) {
+          const decrypted = decrypt(encrypted);
+          if (decrypted && decrypted.trim().startsWith('AIza')) {
+            isConfiguredInDB = true;
+          } else {
+            decryptionFailed = true;
+            console.warn("Falha na decriptografia da chave do banco. Possível mismatch de SERVER_ENCRYPTION_KEY.");
+          }
+        }
+      }
+      
+      return res.json({ 
+        isConfigured: isConfiguredInDB || isConfiguredInEnv,
+        type: isConfiguredInDB ? 'database' : (isConfiguredInEnv ? 'environment' : 'none'),
+        decryptionFailed,
+        message: isConfiguredInDB ? 'Chave do cliente ativa' : (decryptionFailed ? 'Erro de Decriptografia (Salve a chave novamente)' : (isConfiguredInEnv ? 'Usando chave do Sistema' : 'Nenhuma chave configurada'))
+      });
     } catch (err) {
-      return res.json({ isConfigured: false });
+      const isEnvFallback = !!process.env.GEMINI_API_KEY;
+      return res.json({ 
+        isConfigured: isEnvFallback, 
+        type: isEnvFallback ? 'environment' : 'none',
+        message: 'Erro ao verificar status.'
+      });
     }
   });
 
@@ -316,7 +365,7 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
 </html>`);
     });
 
-  // Rota segura para IA (Gemini) - Usa a chave do cliente se existir
+  // Rota segura para IA (Gemini) - Usa a chave do cliente se existir, caso contrário tenta a global
   app.post("/api/gemini/generate-post", async (req, res) => {
     try {
       const { product, shareLink } = req.body;
@@ -329,21 +378,32 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
         if (settingsDoc.exists) {
           const encrypted = settingsDoc.data()?.encryptedKey;
           if (encrypted) {
-            apiKey = decrypt(encrypted);
+            const decrypted = decrypt(encrypted);
+            // Validar se a chave parece legítima (inicia com AIza para Google API)
+            if (decrypted && decrypted.startsWith('AIza')) {
+              apiKey = decrypted;
+            } else {
+              console.warn("Chave decriptografada parece inválida ou de outra versão. Usando fallback.");
+            }
           }
         }
       }
 
-      // 2. Se não houver chave do cliente, retorna erro (Fallback global removido para uso do cliente)
+      // 2. Fallback para a chave de ambiente (Vercel / AI Studio)
       if (!apiKey || apiKey === "") {
+        console.log("Tentando fallback para GEMINI_API_KEY do ambiente...");
+        apiKey = process.env.GEMINI_API_KEY;
+      }
+
+      if (!apiKey || apiKey === "" || apiKey === "YOUR_GEMINI_API_KEY") {
         return res.status(400).json({ 
           success: false, 
-          error: "Chave Gemini não configurada. Informe sua chave no painel para usar o Criador Viral IA." 
+          error: "Chave Gemini não configurada. Informe sua chave no painel para que o sistema possa gerar os posts. A chave do ambiente parece estar vazia ou ser um placeholder." 
         });
       }
 
-      const ai = new GoogleGenerativeAI(apiKey);
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+      console.log(`Usando chave Gemini (Início: ${apiKey.substring(0, 8)}...) - Origem: ${apiKey === process.env.GEMINI_API_KEY ? 'Ambiente' : 'Banco de Dados'}`);
+      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
       
       const prompt = `
       Crie um post de marketing IRRESISTÍVEL para WhatsApp.
@@ -369,9 +429,12 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
       - NÃO adicione introduções. Retorne APENAS o conteúdo.
       `;
 
-      const result = await model.generateContent(prompt);
-      const resp = await result.response;
-      const text = resp.text();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+      
+      const text = response.text;
 
       if (!text) {
         throw new Error("A IA retornou um resultado vazio.");
@@ -380,9 +443,20 @@ const DATABASE_ID = "ai-studio-e7104e09-5d7d-4fb2-be51-883f71432273";
       return res.json({ text });
     } catch (error: any) {
       console.error("Erro no processamento da IA:", error);
-      const errorMessage = error.message?.includes("API_KEY_INVALID") 
-        ? "Sua chave Gemini parece ser inválida. Verifique no console do Google."
-        : (error.message || "Erro inesperado ao gerar post via IA.");
+      
+      let errorMessage = "Erro inesperado ao gerar post via IA.";
+      
+      // Detecção refinada de erros de autenticação e quota
+      const errStr = error.message || String(error);
+      if (errStr.includes("API_KEY_INVALID") || errStr.includes("UNAUTHENTICATED") || errStr.includes("401") || errStr.includes("403")) {
+        errorMessage = "Chave Gemini Rejeitada (Erro 401/403): A chave fornecida é inválida ou expirou. Se você salvou a chave no Vercel, você deve salvá-la NOVAMENTE aqui no Preview, pois as chaves de criptografia são diferentes.";
+      } else if (errStr.includes("quota") || errStr.includes("429") || errStr.includes("limit")) {
+        errorMessage = "Limite de Cotas (Quota Exceeded): A chave atingiu o limite de requisições gratuitas do Google. Se você estiver usando a chave padrão do sistema, ela pode estar congestionada. Recomendamos gerar sua própria chave gratuita no Google AI Studio e salvá-la no painel.";
+      } else if (errStr.includes("User location is not supported")) {
+        errorMessage = "Região Não Suportada: A API Gemini ainda não está disponível em sua região geográfica atual.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
 
       return res.status(500).json({ 
         success: false,
