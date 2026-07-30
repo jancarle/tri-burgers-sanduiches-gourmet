@@ -9,7 +9,6 @@ export default function Footer() {
       text: 'Bateu a fome? 🍔 Pede na Tri Burgers agora! Hambúrguer artesanal e entrega rápida.',
       url: window.location.origin,
     };
-
     try {
       if (navigator.share) {
         await navigator.share(shareData);
@@ -22,10 +21,7 @@ export default function Footer() {
       console.log('Compartilhamento cancelado ou falhou', err);
     }
   };
-
   const contactUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá!')}`;
-  const devUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá! Vi o cardápio da Tri Burgers e gostaria de um orçamento para meu estabelecimento.')}`;
-
   return (
     <footer className="bg-black text-white pt-24 pb-12 border-t border-white/10 relative overflow-hidden">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent" />
@@ -48,12 +44,11 @@ export default function Footer() {
               <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-green-500 hover:bg-green-500/10 transition-all group" title="WhatsApp">
                 <MessageCircle size={20} className="group-hover:scale-110 transition-transform" />
               </a>
-              <a href="https://g.page/r/CTufWNHrYHk6EAE/review" target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 transition-all group" title="Avalie-nos no Google">
+              <a href="https://g.page/r/CTufWNHrYHk6EAE/review" target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-yellow-400 hover:bg-yellow-400/10 transition-all group" title="Avalie-nos no Google">
                 <Star size={20} className="group-hover:scale-110 transition-transform" />
               </a>
             </div>
           </div>
-          
           <div className="md:col-span-3">
             <h4 className="font-black uppercase tracking-[0.2em] text-xs mb-8 text-red-600">Links Rápidos</h4>
             <ul className="space-y-4 font-medium text-gray-400">
@@ -63,7 +58,6 @@ export default function Footer() {
               <li><a href="#contato" className="hover:text-white hover:translate-x-2 transition-all inline-block">Contato</a></li>
             </ul>
           </div>
-
           <div className="md:col-span-4" itemScope itemType="https://schema.org/Restaurant">
             <meta itemProp="name" content="Tri Burgers" />
             <h4 className="font-black uppercase tracking-[0.2em] text-xs mb-8 text-red-600">Contato & Local</h4>
@@ -94,10 +88,9 @@ export default function Footer() {
             </ul>
           </div>
         </div>
-        
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
           <p>© 2026 Tri Burgers Gourmet. Todos os direitos reservados. <Link to="/admin" className="ml-2 hover:text-white transition-colors opacity-50 hover:opacity-100">Área Admin</Link></p>
-          <p className="flex items-center gap-2">Desenvolvido com <span className="text-red-600">⚡</span> por <a href={devUrl} target="_blank" rel="noopener noreferrer" className="text-white hover:text-red-500 transition-colors underline decoration-white/30 underline-offset-4">Jan Carle | Negócios Locais</a></p>
+          <p className="flex items-center gap-2">Desenvolvido com <span className="text-red-600">⚡</span> por <a href="https://netjan.com/gestor-de-google-meu-negocio/" target="_blank" rel="noopener noreferrer" className="text-white hover:text-red-500 transition-colors underline decoration-white/30 underline-offset-4">Jan Carle | Negócios Locais</a></p>
         </div>
       </div>
     </footer>
