@@ -1,3 +1,13 @@
+export interface Addon {
+  id: string;
+  name: string;
+  price: number;
+  available: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
