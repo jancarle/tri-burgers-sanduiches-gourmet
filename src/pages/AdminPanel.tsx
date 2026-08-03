@@ -6,6 +6,7 @@ import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnaps
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
 import { MenuItem } from '../types';
+import { DEFAULT_SITE_IMAGES, SiteImages } from '../contexts/CartContext';
 import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -36,8 +37,13 @@ export default function AdminPanel() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
-  const [activeTab, setActiveTab] = useState<'menu' | 'marketing' | 'orders'>('orders');
+  const [activeTab, setActiveTab] = useState<'menu' | 'marketing' | 'orders' | 'siteImages'>('orders');
   const [isStoreOpen, setIsStoreOpen] = useState(true);
+  
+  // Site Media State
+  const [siteImages, setSiteImages] = useState<SiteImages>(DEFAULT_SITE_IMAGES);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [isSavingSiteImages, setIsSavingSiteImages] = useState(false);
   
   // Marketing AI State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -106,46 +112,52 @@ export default function AdminPanel() {
     }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'store'));
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.isPremium !== undefined) {
-          setIsPremium(data.isPremium);
-        }
-        if (data.isStoreOpen !== undefined) {
-          setIsStoreOpen(data.isStoreOpen);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const handleToggleStoreOpen = async () => {
     const newValue = !isStoreOpen;
     setIsStoreOpen(newValue);
     try {
       await setDoc(doc(db, 'settings', 'store'), { isStoreOpen: newValue }, { merge: true });
-    } catch (e) {
+      toast.success(newValue ? "Loja aberta no sistema!" : "Loja fechada no sistema!");
+    } catch (e: any) {
       console.error("Erro ao atualizar status da loja", e);
+      setIsStoreOpen(!newValue); // Reverte o estado local em caso de falha no Firebase
+      toast.error(`Erro ao salvar no Firebase: ${e?.message || 'Acesso negado ou erro de conexão'}`);
     }
   };
 
   useEffect(() => {
     if (user) {
       fetchItems();
-      fetchSettings();
       checkGeminiStatus();
+
+      // Listener em tempo real do status e configurações da loja
+      const unsubSettings = onSnapshot(doc(db, 'settings', 'store'), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.isPremium !== undefined) setIsPremium(data.isPremium);
+          if (data.isStoreOpen !== undefined) setIsStoreOpen(data.isStoreOpen);
+          setSiteImages({
+            heroImage: data.heroImage || DEFAULT_SITE_IMAGES.heroImage,
+            craftImage: data.craftImage || DEFAULT_SITE_IMAGES.craftImage,
+            menuCardImage: data.menuCardImage || DEFAULT_SITE_IMAGES.menuCardImage,
+            physicalStoreImage: data.physicalStoreImage || DEFAULT_SITE_IMAGES.physicalStoreImage,
+            aboutImage: data.aboutImage || DEFAULT_SITE_IMAGES.aboutImage,
+          });
+        }
+      }, (err) => {
+        console.error("Erro ao escutar settings/store:", err);
+      });
       
       const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-      const unsub = onSnapshot(q, (snap) => {
+      const unsubOrders = onSnapshot(q, (snap) => {
         const fetchedOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(fetchedOrders);
       });
       
-      return () => unsub();
+      return () => {
+        unsubSettings();
+        unsubOrders();
+      };
     }
   }, [user]);
 
@@ -155,12 +167,95 @@ export default function AdminPanel() {
     }
   }, [activeTab, isAgencyOwner]);
 
+  const handleUploadSiteMedia = async (fieldKey: keyof SiteImages, file: File) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const isAllowedExtension = ['jpg', 'jpeg', 'png'].includes(fileExtension || '');
+
+    if (!allowedTypes.includes(file.type) && !isAllowedExtension) {
+      toast.error("Erro: Apenas imagens JPG ou PNG são permitidas.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Erro: A imagem deve ter no máximo 2 MB.");
+      return;
+    }
+
+    setUploadingField(fieldKey);
+
+    // 1. Tentar upload via servidor (Cloudinary)
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/cloudinary/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await response.json();
+          if (data.success && data.imageUrl) {
+            setSiteImages(prev => ({ ...prev, [fieldKey]: data.imageUrl }));
+            toast.success("Imagem enviada ao Cloudinary com sucesso!");
+            setUploadingField(null);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[SITE MEDIA] Servidor Cloudinary indisponível ou chaves ausentes. Usando Firebase Storage...", err);
+    }
+
+    // 2. Fallback automático para Firebase Storage (disponível por padrão no app)
+    try {
+      if (storage) {
+        const processedBlob = await processImage(file, { maxWidth: 1920, quality: 0.85 });
+        const storageRef = ref(storage, `site_media/${fieldKey}_${Date.now()}.jpg`);
+        const snapshot = await uploadBytes(storageRef, processedBlob, { contentType: 'image/jpeg' });
+        const downloadURL = await getDownloadURL(snapshot.ref);
+
+        setSiteImages(prev => ({ ...prev, [fieldKey]: downloadURL }));
+        toast.success("Imagem enviada com sucesso via Firebase Storage!");
+        setUploadingField(null);
+        return;
+      }
+    } catch (storageErr: any) {
+      console.error("[SITE MEDIA] Erro no Firebase Storage:", storageErr);
+    }
+
+    toast.error("Não foi possível realizar o upload automático. Você também pode colar a URL direta da imagem (ex: Imgur, Cloudinary) no campo ao lado.");
+    setUploadingField(null);
+  };
+
+  const handleSaveSiteImages = async () => {
+    setIsSavingSiteImages(true);
+    try {
+      await setDoc(doc(db, 'settings', 'store'), siteImages, { merge: true });
+      toast.success("Mídias do site atualizadas e salvas com sucesso no Firebase!");
+    } catch (e: any) {
+      console.error("Erro ao salvar mídias no Firebase:", e);
+      toast.error(`Erro ao salvar no Firebase: ${e?.message || 'Erro de permissão'}`);
+    } finally {
+      setIsSavingSiteImages(false);
+    }
+  };
+
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Erro no login:", e);
+      if (e?.code === 'auth/unauthorized-domain') {
+        toast.error(`Domínio não autorizado no Firebase! Adicione "${window.location.hostname}" no Console do Firebase em Authentication -> Configurações -> Domínios Autorizados.`, { duration: 8000 });
+        alert(`⚠️ ATENÇÃO: O domínio "${window.location.hostname}" ainda não está autorizado no Firebase Authentication.\n\nPara corrigir:\n1. Acesse o Console do Firebase (firebase.google.com)\n2. Vá em Authentication -> Configurações -> Domínios Autorizados\n3. Adicione o domínio: ${window.location.hostname}`);
+      } else {
+        toast.error(`Erro ao realizar login: ${e?.message || 'Tente novamente.'}`);
+      }
     }
   };
 
@@ -296,7 +391,7 @@ export default function AdminPanel() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-6">
             <div>
-              <h1 className="text-2xl font-bold text-orange-500">Painel do Delivery</h1>
+              <h2 className="text-2xl font-bold text-orange-500">Painel do Delivery</h2>
               <p className="text-sm text-zinc-400">{user.email}</p>
             </div>
             
@@ -313,7 +408,7 @@ export default function AdminPanel() {
               </button>
             </div>
           </div>
-          <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+          <div className="flex flex-wrap sm:flex-nowrap gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
             <button 
               onClick={() => setActiveTab('orders')}
               className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'orders' ? 'bg-red-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -325,6 +420,13 @@ export default function AdminPanel() {
               className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${activeTab === 'menu' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
               Cardápio
+            </button>
+            {/* PRODUCTION_PARITY_MEDIA_TAB_2026_08_03 */}
+            <button 
+              onClick={() => setActiveTab('siteImages')}
+              className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'siteImages' ? 'bg-red-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Mídia do Site <ImageIcon size={16} />
             </button>
             {isAgencyOwner && (
               <button 
@@ -878,6 +980,198 @@ export default function AdminPanel() {
                 />
                 <p className="text-black text-center text-xs font-bold mt-3 uppercase tracking-widest">Avalie-nos no Google</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'siteImages' && (
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-zinc-800/80 border border-zinc-700/60 p-6 rounded-2xl">
+              <div>
+                <h2 className="text-2xl font-bold flex items-center gap-3 text-white">
+                  <ImageIcon className="text-red-500" /> Gerenciador de Mídias e Banners do Site
+                </h2>
+                <p className="text-sm text-zinc-400 mt-1 max-w-2xl">
+                  Altere as imagens estáticas da página inicial e institucional diretamente daqui. Você pode colar URLs de imagens ou fazer upload direto de arquivos JPG/PNG para o <strong>Cloudinary</strong>.
+                </p>
+              </div>
+
+              <button
+                onClick={handleSaveSiteImages}
+                disabled={isSavingSiteImages}
+                className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 shrink-0"
+              >
+                {isSavingSiteImages ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Salvando Mídias...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} /> Salvar Mídias no Firebase
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  key: 'heroImage' as const,
+                  title: 'Banner Principal (Hero Background)',
+                  description: 'Fundo da área de destaque na entrada do site.',
+                  dimensions: '1920 × 1080 px',
+                  ratio: '16:9 Horizontal',
+                  defaultUrl: DEFAULT_SITE_IMAGES.heroImage,
+                  aspect: 'aspect-video'
+                },
+                {
+                  key: 'craftImage' as const,
+                  title: 'A Ciência da Suculência (Making-Of)',
+                  description: 'Foto da seção que explica os blends, carne e pão selado.',
+                  dimensions: '1000 × 1000 px',
+                  ratio: '1:1 Quadrada',
+                  defaultUrl: DEFAULT_SITE_IMAGES.craftImage,
+                  aspect: 'aspect-square'
+                },
+                {
+                  key: 'menuCardImage' as const,
+                  title: 'Cardápio Inteligente (Bloco WhatsApp)',
+                  description: 'Imagem do lanche/burger ao lado da chamada do WhatsApp.',
+                  dimensions: '1200 × 800 px',
+                  ratio: '3:2 / 16:9 Horizontal',
+                  defaultUrl: DEFAULT_SITE_IMAGES.menuCardImage,
+                  aspect: 'aspect-video'
+                },
+                {
+                  key: 'physicalStoreImage' as const,
+                  title: 'Espaço Físico & Kids (Pula-Pula)',
+                  description: 'Foto da fachada, mesas ou espaço kids.',
+                  dimensions: '1200 × 900 px',
+                  ratio: '4:3 ou 16:9 Horizontal',
+                  defaultUrl: DEFAULT_SITE_IMAGES.physicalStoreImage,
+                  aspect: 'aspect-video'
+                },
+                {
+                  key: 'aboutImage' as const,
+                  title: 'História & Tradição (Página Sobre)',
+                  description: 'Imagem de destaque na página "Nossa História".',
+                  dimensions: '1000 × 1000 px',
+                  ratio: '1:1 Quadrada',
+                  defaultUrl: DEFAULT_SITE_IMAGES.aboutImage,
+                  aspect: 'aspect-square'
+                }
+              ].map((item) => {
+                const currentUrl = siteImages[item.key] || item.defaultUrl;
+                const isUploadingThis = uploadingField === item.key;
+
+                return (
+                  <div key={item.key} className="bg-zinc-800 border border-zinc-700/80 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-xl">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-lg text-white">{item.title}</h3>
+                        <button
+                          type="button"
+                          onClick={() => setSiteImages(prev => ({ ...prev, [item.key]: item.defaultUrl }))}
+                          title="Restaurar imagem padrão"
+                          className="text-xs text-zinc-400 hover:text-orange-400 transition-colors flex items-center gap-1 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-700 shrink-0"
+                        >
+                          <RefreshCw size={12} /> Padrão
+                        </button>
+                      </div>
+                      
+                      <p className="text-xs text-zinc-400 mb-2">{item.description}</p>
+
+                      {/* Dimensions Badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="bg-orange-500/10 text-orange-400 border border-orange-500/30 text-[11px] font-bold px-2.5 py-1 rounded-md">
+                          📐 Dimensão ideal: {item.dimensions}
+                        </span>
+                        <span className="bg-zinc-900 text-zinc-400 border border-zinc-700 text-[11px] font-medium px-2 py-1 rounded-md">
+                          {item.ratio}
+                        </span>
+                      </div>
+
+                      {/* Preview Image */}
+                      <div className={`relative ${item.aspect} w-full rounded-xl overflow-hidden bg-zinc-950 border border-zinc-700 mb-4 group`}>
+                        <img
+                          src={currentUrl}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = item.defaultUrl;
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2 text-center text-xs font-bold text-white">
+                          Pré-visualização
+                        </div>
+                      </div>
+
+                      {/* URL Input */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-300 block">
+                          URL da Imagem:
+                        </label>
+                        <input
+                          type="text"
+                          value={siteImages[item.key] || ''}
+                          onChange={(e) => setSiteImages(prev => ({ ...prev, [item.key]: e.target.value }))}
+                          placeholder={item.defaultUrl}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-red-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cloudinary Upload Button */}
+                    <div className="pt-2 border-t border-zinc-700/50 flex items-center justify-between gap-2">
+                      <label className={`w-full cursor-pointer bg-zinc-900 hover:bg-zinc-700 text-zinc-200 text-xs font-bold py-2.5 px-3 rounded-lg border border-zinc-700 flex items-center justify-center gap-2 transition-all ${isUploadingThis ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        {isUploadingThis ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin text-red-500" /> Enviando foto...
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={14} className="text-orange-400" /> Enviar Arquivo JPG/PNG
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          disabled={isUploadingThis}
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadSiteMedia(item.key, file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Save Bar */}
+            <div className="bg-zinc-950/90 border border-zinc-800 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 sticky bottom-4 z-20 backdrop-blur-md shadow-2xl">
+              <div className="text-xs text-zinc-400 flex items-center gap-2">
+                <Info size={16} className="text-orange-500 shrink-0" />
+                <span>As alterações salvas aqui são aplicadas automaticamente no site público para todos os clientes em tempo real.</span>
+              </div>
+              <button
+                onClick={handleSaveSiteImages}
+                disabled={isSavingSiteImages}
+                className="w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 shrink-0"
+              >
+                {isSavingSiteImages ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Salvando Mídias...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} /> Salvar Mídias no Firebase
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
