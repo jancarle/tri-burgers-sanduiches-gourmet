@@ -14,7 +14,7 @@ import { useCart } from '../contexts/CartContext';
 
 export default function Home() {
   const [snapshot, loading] = useCollectionData(collection(db, 'menu'));
-  const { addToCart } = useCart();
+  const { addToCart, siteImages } = useCart();
 
   useEffect(() => {
     // Lógica para Deep Linking (rola até o cardápio se houver produto na URL)
@@ -51,7 +51,7 @@ export default function Home() {
       <section className="relative min-h-screen flex items-center justify-center pt-20" aria-label="Introdução Tri Burgers">
         <div className="absolute inset-0 z-0 overflow-hidden">
           <img
-            src="https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1920"
+            src={siteImages.heroImage}
             alt="Hambúrguer Gourmet Artesanal Tri Burgers"
             className="w-full h-full object-cover opacity-80 scale-105 animate-pulse-slow"
             referrerPolicy="no-referrer"
@@ -69,10 +69,10 @@ export default function Home() {
               <Flame size={14} className="animate-bounce" /> {SLOGANS[3]}
             </div>
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.85] mb-8 uppercase italic">
-              O MELHOR <br /> <span className="text-red-500 not-italic">BURGER</span> <br /> DE GOIÂNIA
+              Tri Burgers Sanduicheria <br /> <span className="text-red-500 not-italic">no Leste Vila Nova</span> <br /> em Goiânia
             </h1>
             <p className="text-lg md:text-2xl text-gray-400 max-w-3xl mx-auto mb-12 font-medium leading-relaxed">
-              Esqueça tudo o que você sabe sobre lanches. Na <span className="text-white font-bold">Tri Burgers</span>, cada mordida é um confronto direto com a perfeição. Blend artesanal, pão nuvem e o segredo que nos mantém como a <strong className="text-white">referência em Pit Dog no Setor Leste Vila Nova</strong> desde 2012.
+              Esqueça tudo o que você sabe sobre lanches. Na <span className="text-white font-bold">Tri Burgers Sanduicheria</span>, cada mordida é um confronto direto com a perfeição. Blend artesanal, pão nuvem e o segredo que nos mantém como a <strong className="text-white">referência em Pit Dog no Setor Leste Vila Nova</strong> desde 2012.
             </p>
             
             <div className="flex items-center justify-center w-full max-w-md mx-auto relative group">
@@ -110,7 +110,7 @@ export default function Home() {
                 className="relative z-10 rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl group"
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000" 
+                  src={siteImages.craftImage} 
                   alt="Making of" 
                   className="w-full h-full object-cover origin-center opacity-90 group-hover:scale-105 group-hover:opacity-100 transition-all duration-1000"
                   referrerPolicy="no-referrer"
@@ -140,7 +140,7 @@ export default function Home() {
                       <Zap size={20} />
                     </div>
                     <div>
-                      <h4 className="font-black uppercase tracking-tight text-white">{item.t}</h4>
+                      <h3 className="font-black uppercase tracking-tight text-white">{item.t}</h3>
                       <p className="text-gray-500 text-sm">{item.d}</p>
                     </div>
                   </div>
@@ -282,7 +282,7 @@ export default function Home() {
             <div className="flex-1 relative z-10 w-full order-2 lg:order-1 mt-10 lg:mt-0">
               <div className="relative rounded-[2rem] overflow-hidden aspect-[4/3] md:aspect-[16/9] lg:aspect-square group shadow-2xl border border-white/10">
                 <img 
-                  src="https://i.postimg.cc/65W5WKYb/tri-burges.webp" 
+                  src={siteImages.physicalStoreImage} 
                   alt="Espaço físico do Tri Burgers com pula-pula" 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   referrerPolicy="no-referrer"
