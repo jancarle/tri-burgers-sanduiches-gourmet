@@ -1,4 +1,4 @@
-import { MenuItem, Category } from './types';
+import { MenuItem, Category, Addon } from './types';
 
 export const CATEGORIES: Category[] = [
   'Burgers Gourmet',
@@ -612,4 +612,21 @@ export const TRADITIONAL_BURGERS: MenuItem[] = [
     category: 'Sanduíches Tradicionais',
     image: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&q=80&w=800'
   }
+];
+
+// ADDONS_SEED_13_ITEMS_IDEMPOTENT_2026_08_03
+export const INITIAL_ADDONS: Addon[] = [
+  { id: 'add1', name: 'Hambúrguer de Costela', price: 14.00, available: true, order: 1 },
+  { id: 'add2', name: 'Hambúrguer de Picanha', price: 14.00, available: true, order: 2 },
+  { id: 'add3', name: 'Filé Mignon', price: 14.00, available: true, order: 3 },
+  { id: 'add4', name: 'Picanha', price: 14.00, available: true, order: 4 },
+  { id: 'add5', name: 'Filé de Frango', price: 10.00, available: true, order: 5 },
+  { id: 'add6', name: 'Hambúrguer', price: 8.00, available: true, order: 6 },
+  { id: 'add7', name: 'Presunto', price: 4.00, available: true, order: 7 },
+  { id: 'add8', name: 'Salsicha', price: 4.00, available: true, order: 8 },
+  { id: 'add9', name: 'Ovo', price: 4.00, available: true, order: 9 },
+  { id: 'add10', name: 'Queijo', price: 6.00, available: true, order: 10 },
+  { id: 'add11', name: 'Bacon', price: 6.00, available: true, order: 11 },
+  { id: 'add12', name: 'Catupiry', price: 5.00, available: true, order: 12 },
+  { id: 'add13', name: 'Cheddar', price: 5.00, available: true, order: 13 },
 ];
