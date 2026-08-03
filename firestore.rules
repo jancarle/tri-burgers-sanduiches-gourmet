@@ -66,6 +66,12 @@ service cloud.firestore {
       
       allow delete: if isAdmin();
     }
+
+    // Match Addons
+    match /addons/{addonId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     // Match Orders
     match /orders/{orderId} {
       // Anyone can create an order (public checkout)
