@@ -9,6 +9,22 @@ export interface CartItem extends MenuItem {
   selectedOption?: { name: string; price: number };
 }
 
+export interface SiteImages {
+  heroImage: string;
+  craftImage: string;
+  menuCardImage: string;
+  physicalStoreImage: string;
+  aboutImage: string;
+}
+
+export const DEFAULT_SITE_IMAGES: SiteImages = {
+  heroImage: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=1920',
+  craftImage: 'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000',
+  menuCardImage: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=800',
+  physicalStoreImage: 'https://i.postimg.cc/65W5WKYb/tri-burges.webp',
+  aboutImage: 'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000',
+};
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (item: MenuItem, selectedOption?: { name: string; price: number }) => void;
@@ -20,6 +36,7 @@ interface CartContextType {
   setIsCartOpen: (isOpen: boolean) => void;
   clearCart: () => void;
   isStoreOpen: boolean;
+  siteImages: SiteImages;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -28,6 +45,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isStoreOpen, setIsStoreOpen] = useState(true);
+  const [siteImages, setSiteImages] = useState<SiteImages>(DEFAULT_SITE_IMAGES);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'store'), (docSnap) => {
@@ -36,6 +54,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (data.isStoreOpen !== undefined) {
           setIsStoreOpen(data.isStoreOpen);
         }
+        setSiteImages({
+          heroImage: data.heroImage || DEFAULT_SITE_IMAGES.heroImage,
+          craftImage: data.craftImage || DEFAULT_SITE_IMAGES.craftImage,
+          menuCardImage: data.menuCardImage || DEFAULT_SITE_IMAGES.menuCardImage,
+          physicalStoreImage: data.physicalStoreImage || DEFAULT_SITE_IMAGES.physicalStoreImage,
+          aboutImage: data.aboutImage || DEFAULT_SITE_IMAGES.aboutImage,
+        });
       }
     });
 
@@ -89,6 +114,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsCartOpen,
       clearCart,
       isStoreOpen,
+      siteImages,
     }}>
       {children}
     </CartContext.Provider>
