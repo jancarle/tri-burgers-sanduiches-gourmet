@@ -4,8 +4,8 @@ import { auth, db, storage } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc, onSnapshot, query, orderBy, deleteField } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
-import { MenuItem } from '../types';
+import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES, INITIAL_ADDONS } from '../constants';
+import { MenuItem, Addon } from '../types';
 import { DEFAULT_SITE_IMAGES, SiteImages } from '../contexts/CartContext';
 import { LogOut, Plus, Edit2, Save, Trash2, Check, X, RefreshCw, QrCode, Download, Star, Bell, Lock, Send, Smartphone, Flame, Shield, ChefHat, Sparkles, Copy, MessageCircle, AlertCircle, Info, Share2, Image as ImageIcon, Upload, Loader2, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -40,10 +40,18 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState<'menu' | 'marketing' | 'orders' | 'siteImages'>('orders');
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   
-  // Site Media State
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [siteImages, setSiteImages] = useState<SiteImages>(DEFAULT_SITE_IMAGES);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [isSavingSiteImages, setIsSavingSiteImages] = useState(false);
+
+  // Add-ons Management State
+  const [addons, setAddons] = useState<Addon[]>([]);
+  const [isLoadingAddons, setIsLoadingAddons] = useState(true);
+  const [menuSubTab, setMenuSubTab] = useState<'products' | 'addons'>('products');
+  const [isImportingAddons, setIsImportingAddons] = useState(false);
+  const [editingAddon, setEditingAddon] = useState<Partial<Addon> | null>(null);
+  const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   
   // Marketing AI State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -153,16 +161,147 @@ export default function AdminPanel() {
         const fetchedOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(fetchedOrders);
       });
+
+      const qAddons = query(collection(db, 'addons'), orderBy('order', 'asc'));
+      const unsubAddons = onSnapshot(qAddons, (snap) => {
+        const list: Addon[] = [];
+        snap.forEach(d => {
+          list.push({ id: d.id, ...d.data() } as Addon);
+        });
+        list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setAddons(list);
+        setIsLoadingAddons(false);
+      }, (err) => {
+        console.error("Erro ao escutar coleção 'addons':", err);
+        setIsLoadingAddons(false);
+      });
       
       return () => {
         unsubSettings();
         unsubOrders();
+        unsubAddons();
       };
     }
   }, [user]);
 
+  // ADDONS_SEED_13_ITEMS_IDEMPOTENT_2026_08_03
+  const handleImportInitialAddons = async () => {
+    if (!isAgencyOwner) {
+      toast.error('Apenas a agência (marketingjan@gmail.com) pode executar esta importação.');
+      return;
+    }
+    if (!confirm('Deseja importar os 13 adicionais padrão para a coleção "addons"? Documentos já existentes não serão sobrescritos.')) {
+      return;
+    }
+    setIsImportingAddons(true);
+    let createdCount = 0;
+    let existingCount = 0;
+    let failedCount = 0;
+
+    for (const item of INITIAL_ADDONS) {
+      try {
+        const docRef = doc(db, 'addons', item.id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          existingCount++;
+        } else {
+          const now = new Date().toISOString();
+          await setDoc(docRef, {
+            ...item,
+            createdAt: now,
+            updatedAt: now,
+          });
+          createdCount++;
+        }
+      } catch (err) {
+        console.error(`Erro ao importar adicional ${item.id}:`, err);
+        failedCount++;
+      }
+    }
+
+    setIsImportingAddons(false);
+    toast.success(`Importação concluída: ${createdCount} criados, ${existingCount} já existentes, ${failedCount} falhas.`);
+  };
+
+  const handleSaveAddon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAddon) return;
+
+    const name = editingAddon.name?.trim();
+    if (!name) {
+      toast.error('O nome do adicional não pode estar vazio.');
+      return;
+    }
+
+    const price = Number(editingAddon.price);
+    if (isNaN(price) || price < 0) {
+      toast.error('O preço deve ser um valor numérico válido maior ou igual a zero.');
+      return;
+    }
+
+    const order = Number(editingAddon.order ?? (addons.length + 1));
+    if (isNaN(order)) {
+      toast.error('A ordem de exibição deve ser um número válido.');
+      return;
+    }
+
+    const id = editingAddon.id || ('add_' + Date.now());
+    const now = new Date().toISOString();
+
+    try {
+      const docRef = doc(db, 'addons', id);
+      const isNew = !editingAddon.id;
+
+      const payload: any = {
+        id,
+        name,
+        price,
+        available: editingAddon.available ?? true,
+        order,
+        updatedAt: now,
+      };
+      if (isNew) {
+        payload.createdAt = now;
+      }
+
+      await setDoc(docRef, payload, { merge: true });
+      toast.success(`Adicional "${name}" salvo com sucesso!`);
+      setIsAddonModalOpen(false);
+      setEditingAddon(null);
+    } catch (err: any) {
+      console.error('Erro ao salvar adicional:', err);
+      toast.error('Erro ao salvar adicional: ' + (err?.message || 'Sem permissão'));
+    }
+  };
+
+  const handleToggleAddonAvailable = async (addon: Addon) => {
+    try {
+      const docRef = doc(db, 'addons', addon.id);
+      const now = new Date().toISOString();
+      await updateDoc(docRef, {
+        available: !addon.available,
+        updatedAt: now,
+      });
+      toast.success(`Disponibilidade de "${addon.name}" alterada para ${!addon.available ? 'Disponível' : 'Indisponível'}.`);
+    } catch (err: any) {
+      console.error('Erro ao atualizar disponibilidade do adicional:', err);
+      toast.error('Erro ao atualizar adicional: ' + (err?.message || 'Sem permissão'));
+    }
+  };
+
+  const handleDeleteAddon = async (id: string, name: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o adicional "${name}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'addons', id));
+      toast.success(`Adicional "${name}" excluído com sucesso.`);
+    } catch (err: any) {
+      console.error('Erro ao excluir adicional:', err);
+      toast.error('Erro ao excluir adicional: ' + (err?.message || 'Sem permissão'));
+    }
+  };
+
   useEffect(() => {
-    if (activeTab === 'marketing' && !isAgencyOwner) {
+    if ((activeTab === 'marketing' || activeTab === 'siteImages') && !isAgencyOwner) {
       setActiveTab('orders');
     }
   }, [activeTab, isAgencyOwner]);
@@ -330,6 +469,28 @@ export default function AdminPanel() {
     }
   };
 
+  const handleCreateWithCategory = async (categoryName: string) => {
+    const id = 'add_' + Date.now();
+    const newItem: MenuItem = {
+      id,
+      name: 'Novo Adicional',
+      description: 'Adicional para os sanduíches',
+      price: 5.00,
+      category: categoryName,
+      available: true,
+    };
+    try {
+      await setDoc(doc(db, 'menu', id), newItem);
+      setItems(prev => [newItem, ...prev]);
+      setSelectedCategoryFilter(categoryName);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      toast.success('Adicional criado com sucesso! Edite os detalhes no topo da lista.');
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Erro ao criar adicional: ' + (e?.message || 'Sem permissão'));
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja excluir este item?')) return;
     try {
@@ -422,12 +583,14 @@ export default function AdminPanel() {
               Cardápio
             </button>
             {/* PRODUCTION_PARITY_MEDIA_TAB_2026_08_03 */}
-            <button 
-              onClick={() => setActiveTab('siteImages')}
-              className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'siteImages' ? 'bg-red-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Mídia do Site <ImageIcon size={16} />
-            </button>
+            {isAgencyOwner && (
+              <button 
+                onClick={() => setActiveTab('siteImages')}
+                className={`px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'siteImages' ? 'bg-red-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Mídia do Site <ImageIcon size={16} />
+              </button>
+            )}
             {isAgencyOwner && (
               <button 
                 onClick={() => setActiveTab('marketing')}
@@ -546,23 +709,221 @@ export default function AdminPanel() {
 
         {activeTab === 'menu' && (
           <>
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-semibold">Gestão do Cardápio</h2>
-              <button 
-                onClick={handleCreate}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm flex items-center gap-2 transition"
+            {/* Subtab Selector for Cardápio */}
+            <div className="flex border-b border-zinc-800 mb-6">
+              <button
+                onClick={() => setMenuSubTab('products')}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                  menuSubTab === 'products'
+                    ? 'border-orange-500 text-orange-500 bg-orange-500/10'
+                    : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                }`}
               >
-                <Plus className="w-4 h-4" /> Novo Produto
+                <ChefHat size={18} /> Produtos do Cardápio ({items.length})
+              </button>
+              <button
+                onClick={() => setMenuSubTab('addons')}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                  menuSubTab === 'addons'
+                    ? 'border-red-500 text-red-500 bg-red-500/10'
+                    : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Sparkles size={18} /> Adicionais no Firestore ({addons.length})
               </button>
             </div>
 
-            {isLoadingItems ? (
-              <div className="text-center py-20 text-zinc-400">Carregando cardápio...</div>
+            {menuSubTab === 'products' ? (
+              <>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Produtos do Cardápio</h2>
+                    <p className="text-xs text-zinc-400">Gerencie os hambúrgueres e pratos do cardápio.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleCreate}
+                      className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm font-bold flex items-center gap-2 transition text-white shadow-md"
+                    >
+                      <Plus className="w-4 h-4" /> Novo Produto
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category Filter Pills */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none">
+                  <button
+                    onClick={() => setSelectedCategoryFilter('all')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                      selectedCategoryFilter === 'all'
+                        ? 'bg-orange-600 text-white shadow-md'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                    }`}
+                  >
+                    Todos ({items.length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedCategoryFilter('Adicionais')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      selectedCategoryFilter === 'Adicionais'
+                        ? 'bg-red-600 text-white shadow-md ring-2 ring-red-400/30'
+                        : 'bg-red-950/40 text-red-400 border border-red-500/20 hover:bg-red-900/40'
+                    }`}
+                  >
+                    🍔 Adicionais ({items.filter(i => i.category === 'Adicionais').length})
+                  </button>
+                  {Array.from(new Set(items.map(i => i.category)))
+                    .filter(cat => cat !== 'Adicionais')
+                    .map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                          selectedCategoryFilter === cat
+                            ? 'bg-orange-600 text-white shadow-md'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                        }`}
+                      >
+                        {cat} ({items.filter(i => i.category === cat).length})
+                      </button>
+                    ))}
+                </div>
+
+                {isLoadingItems ? (
+                  <div className="text-center py-20 text-zinc-400">Carregando cardápio...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-16">
+                    {(selectedCategoryFilter === 'all'
+                      ? items
+                      : items.filter(i => i.category === selectedCategoryFilter)
+                    ).map(item => (
+                      <ProductCard key={item.id} item={item} onUpdate={handleUpdate} onDelete={() => handleDelete(item.id)} />
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-16">
-                {items.map(item => (
-                  <ProductCard key={item.id} item={item} onUpdate={handleUpdate} onDelete={() => handleDelete(item.id)} />
-                ))}
+              /* ADDONS_MANAGER_FOUNDATION_13_ITEMS_2026_08_03 */
+              <div className="space-y-6 mb-16">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/90 p-5 rounded-2xl border border-zinc-800 shadow-xl">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Sparkles className="text-red-500" size={20} />
+                      Gerenciador de Adicionais (Coleção 'addons')
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Fonte de verdade de adicionais no Firestore. Sincronizado em tempo real.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {isAgencyOwner && (
+                      <button
+                        onClick={handleImportInitialAddons}
+                        disabled={isImportingAddons}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl text-sm font-bold flex items-center gap-2 transition disabled:opacity-50"
+                        title="Importar os 13 adicionais padrão sem sobrescrever existentes"
+                      >
+                        {isImportingAddons ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <RefreshCw className="w-4 h-4 text-red-500" />}
+                        Importar adicionais atuais
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setEditingAddon({
+                          name: '',
+                          price: 5.00,
+                          available: true,
+                          order: addons.length + 1,
+                        });
+                        setIsAddonModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold flex items-center gap-2 transition text-white shadow-md"
+                    >
+                      <Plus className="w-4 h-4" /> Novo Adicional
+                    </button>
+                  </div>
+                </div>
+
+                {isLoadingAddons ? (
+                  <div className="text-center py-16 text-zinc-400 flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-red-500" /> Carregando adicionais...
+                  </div>
+                ) : addons.length === 0 ? (
+                  <div className="text-center py-12 bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-800 p-8">
+                    <p className="text-zinc-400 text-sm mb-4">Nenhum adicional cadastrado na coleção 'addons'.</p>
+                    {isAgencyOwner && (
+                      <button
+                        onClick={handleImportInitialAddons}
+                        disabled={isImportingAddons}
+                        className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold inline-flex items-center gap-2 transition shadow-lg"
+                      >
+                        <RefreshCw className="w-4 h-4" /> Importar 13 adicionais padrão agora
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {addons.map((addon) => (
+                      <div
+                        key={addon.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                          addon.available
+                            ? 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700'
+                            : 'bg-zinc-950/70 border-zinc-900 opacity-60'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start gap-2 mb-2">
+                            <span className="text-xs font-mono px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">
+                              ID: {addon.id}
+                            </span>
+                            <span className="text-xs font-semibold px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded">
+                              Ordem: {addon.order}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-white text-base">{addon.name}</h4>
+                          <p className="text-lg font-bold text-red-400 mt-1">
+                            R$ {addon.price.toFixed(2).replace('.', ',')}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
+                          <button
+                            onClick={() => handleToggleAddonAvailable(addon)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 ${
+                              addon.available
+                                ? 'bg-green-950/80 text-green-400 border border-green-800/50'
+                                : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                            }`}
+                          >
+                            {addon.available ? <Check size={12} /> : <X size={12} />}
+                            {addon.available ? 'Disponível' : 'Indisponível'}
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingAddon({ ...addon });
+                                setIsAddonModalOpen(true);
+                              }}
+                              className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition"
+                              title="Editar Adicional"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAddon(addon.id, addon.name)}
+                              className="p-2 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 rounded-lg transition"
+                              title="Excluir Adicional"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -1172,6 +1533,122 @@ export default function AdminPanel() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit/Create Addon Modal */}
+        {isAddonModalOpen && editingAddon && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+              <div className="flex justify-between items-center mb-5 pb-3 border-b border-zinc-800">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Sparkles className="text-red-500" size={18} />
+                  {editingAddon.id ? 'Editar Adicional' : 'Novo Adicional'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsAddonModalOpen(false);
+                    setEditingAddon(null);
+                  }}
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAddon} className="space-y-4">
+                {editingAddon.id && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1">
+                      ID do Documento (imutável)
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={editingAddon.id}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-500 cursor-not-allowed font-mono"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Nome do Adicional *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Queijo Extra"
+                    value={editingAddon.name || ''}
+                    onChange={(e) => setEditingAddon(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                      Preço (R$) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.50"
+                      min="0"
+                      required
+                      value={editingAddon.price ?? 0}
+                      onChange={(e) => setEditingAddon(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                      Ordem de Exibição
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editingAddon.order ?? 1}
+                      onChange={(e) => setEditingAddon(prev => ({ ...prev, order: parseInt(e.target.value, 10) || 1 }))}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    id="addonAvailableCheck"
+                    checked={editingAddon.available ?? true}
+                    onChange={(e) => setEditingAddon(prev => ({ ...prev, available: e.target.checked }))}
+                    className="w-4 h-4 accent-red-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="addonAvailableCheck" className="text-sm font-medium text-zinc-300 cursor-pointer select-none">
+                    Disponível para seleção
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddonModalOpen(false);
+                      setEditingAddon(null);
+                    }}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-semibold rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-xl transition shadow-md flex items-center gap-2"
+                  >
+                    <Save size={16} /> Salvar Adicional
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
