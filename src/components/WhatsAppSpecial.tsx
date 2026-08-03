@@ -1,8 +1,10 @@
 import { motion } from 'motion/react';
 import { MessageCircle, ShoppingCart, Clock, ShieldCheck } from 'lucide-react';
 import { WHATSAPP_CONFIG } from '../constants';
+import { useCart } from '../contexts/CartContext';
 
 export default function WhatsAppSpecial() {
+  const { isStoreOpen, siteImages } = useCart();
   const url = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodeURIComponent('Olá! Vi o site e quero fazer um pedido agora.')}`;
 
   return (
@@ -15,10 +17,18 @@ export default function WhatsAppSpecial() {
         <div className="bg-black border border-red-600/20 rounded-[3rem] p-8 md:p-16 shadow-[0_0_50px_rgba(220,38,38,0.1)]">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
-              <span className="inline-flex items-center gap-2 bg-green-500/10 text-green-500 text-xs font-black px-4 py-1 rounded-full tracking-widest uppercase mb-6">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                Atendimento Online Agora
-              </span>
+              {/* PRODUCTION_PARITY_STORE_BADGE_2026_08_03 */}
+              {isStoreOpen ? (
+                <span className="inline-flex items-center gap-2 bg-green-500/10 text-green-500 text-xs font-black px-4 py-1 rounded-full tracking-widest uppercase mb-6">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  ATENDIMENTO ONLINE AGORA
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-black px-4 py-1 rounded-full tracking-widest uppercase mb-6 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+                  <span className="w-2 h-2 bg-red-500 rounded-full" />
+                  LOJA FECHADA — ENVIE SUA MENSAGEM
+                </span>
+              )}
               <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 uppercase leading-none">
                 CARDÁPIO <br /><span className="text-red-600">INTELIGENTE.</span>
               </h2>
@@ -51,12 +61,12 @@ export default function WhatsAppSpecial() {
               </p>
             </div>
             
-            <div className="relative hidden lg:block">
+            <div className="relative mt-8 lg:mt-0">
               <div className="absolute inset-0 bg-red-600/20 blur-[100px] rounded-full" />
               <img
-                src="https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=800"
+                src={siteImages.menuCardImage}
                 alt="Burger Close"
-                className="relative z-10 w-full h-auto rounded-[2rem] shadow-2xl border border-white/10 rotate-3"
+                className="relative z-10 w-full h-auto rounded-[2rem] shadow-2xl border border-white/10 rotate-1 lg:rotate-3"
                 referrerPolicy="no-referrer"
               />
             </div>
