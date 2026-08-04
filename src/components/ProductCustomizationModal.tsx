@@ -220,7 +220,7 @@ export default function ProductCustomizationModal({
                 <div className="space-y-3 pt-4 border-t border-zinc-800">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold uppercase tracking-widest text-zinc-300 flex items-center gap-1.5">
-                      <span>Escolha a Opção *</span>
+                      <span>Escolha sua opção *</span>
                     </label>
                     <span className="text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded font-bold border border-red-800/40">
                       Obrigatório
