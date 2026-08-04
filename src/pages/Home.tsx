@@ -206,7 +206,7 @@ export default function Home() {
                         handleProductCardClick(item);
                       }}
                       className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-500 transition-all active:scale-90"
-                      title="Customizar / Adicionar"
+                      title="Pedir este produto"
                     >
                       <ShoppingCart size={20} />
                     </button>
