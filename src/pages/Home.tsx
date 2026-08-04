@@ -9,12 +9,29 @@ import { collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMemo, useState, useEffect } from 'react';
 import { MenuItem, Category } from '../types';
+import ProductCustomizationModal from '../components/ProductCustomizationModal';
+import { isCategoryExcludedFromCustomization } from '../lib/addonUtils';
 
 import { useCart } from '../contexts/CartContext';
 
 export default function Home() {
   const [snapshot, loading] = useCollectionData(collection(db, 'menu'));
   const { addToCart, siteImages } = useCart();
+
+  // Modal State for Product Customization
+  const [modalItem, setModalItem] = useState<MenuItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+
+  const handleProductCardClick = (item: MenuItem) => {
+    if (item.available === false) return;
+
+    if (isCategoryExcludedFromCustomization(item.category)) {
+      addToCart(item);
+    } else {
+      setModalItem(item);
+      setIsModalOpen(true);
+    }
+  };
 
   useEffect(() => {
     // Lógica para Deep Linking (rola até o cardápio se houver produto na URL)
@@ -186,9 +203,10 @@ export default function Home() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        addToCart(item);
+                        handleProductCardClick(item);
                       }}
-                      className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all active:scale-90"
+                      className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-500 transition-all active:scale-90"
+                      title="Customizar / Adicionar"
                     >
                       <ShoppingCart size={20} />
                     </button>
@@ -343,6 +361,16 @@ export default function Home() {
           </a>
         </div>
       </section>
+
+      {/* Product Customization Modal */}
+      <ProductCustomizationModal
+        item={modalItem}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setModalItem(null);
+        }}
+      />
     </main>
   );
 }
