@@ -8,6 +8,13 @@ export interface Addon {
   updatedAt?: string;
 }
 
+export interface SelectedAddon {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
