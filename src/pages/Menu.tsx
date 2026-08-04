@@ -8,11 +8,30 @@ import { db } from '../lib/firebase';
 import { useMemo, useEffect, useState } from 'react';
 import { useCart } from '../contexts/CartContext';
 import { WHATSAPP_CONFIG } from '../constants';
+import ProductCustomizationModal from '../components/ProductCustomizationModal';
+import { isCategoryExcludedFromCustomization } from '../lib/addonUtils';
 
 export default function Menu() {
   const [snapshot, loading] = useCollectionData(collection(db, 'menu'));
   const { addToCart } = useCart();
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
+  // Modal State for Product Customization
+  const [modalItem, setModalItem] = useState<MenuItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [modalInitialOption, setModalInitialOption] = useState<{ name: string; price: number } | undefined>(undefined);
+
+  const handleProductCardClick = (item: MenuItem, option?: { name: string; price: number }) => {
+    if (item.available === false) return;
+
+    if (isCategoryExcludedFromCustomization(item.category)) {
+      addToCart(item, option);
+    } else {
+      setModalItem(item);
+      setModalInitialOption(option);
+      setIsModalOpen(true);
+    }
+  };
 
   // Use Firebase data if it exists, otherwise use local constants
   const allItems = useMemo(() => {
@@ -74,9 +93,9 @@ export default function Menu() {
         >
           EXPERIÊNCIA GASTRONÔMICA
         </motion.span>
-        <h1 className="text-6xl sm:text-7xl md:text-[10rem] font-black tracking-tighter uppercase leading-[0.8] italic mb-6">
+        <h2 className="text-6xl sm:text-7xl md:text-[10rem] font-black tracking-tighter uppercase leading-[0.8] italic mb-6">
           CARDÁPIO <br /><span className="text-red-600 not-italic">SUPREMO.</span>
-        </h1>
+        </h2>
         <p className="text-lg md:text-2xl text-gray-400 font-bold italic mb-12">
           O que você deseja devorar hoje?
         </p>
@@ -105,11 +124,13 @@ export default function Menu() {
 
           if (categoryItems.length === 0) return null;
 
+          const isCategoryEligible = !isCategoryExcludedFromCustomization(cat);
+
           return (
             <div key={cat} id={catId} className="scroll-mt-36 mb-24">
               <div className="flex items-center gap-4 mb-10">
                 <Flame className="text-red-600 shrink-0" size={32} />
-                <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">{cat}</h2>
+                <h3 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">{cat}</h3>
                 <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent ml-4"></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -136,9 +157,28 @@ export default function Menu() {
                           referrerPolicy="no-referrer"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
-                        <div className="absolute top-4 right-4 md:top-6 md:right-6 bg-black/80 backdrop-blur-md px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl border border-white/10">
-                          <span className="text-red-500 font-black tracking-widest text-sm md:text-base">{item.priceText || `R$ ${item.price.toFixed(2)}`}</span>
+                        
+                        {/* Price Tag + Plus Button for Customization */}
+                        <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-2 z-20">
+                          <div className="bg-black/80 backdrop-blur-md px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl border border-white/10">
+                            <span className="text-red-500 font-black tracking-widest text-sm md:text-base">
+                              {item.priceText || `R$ ${item.price.toFixed(2)}`}
+                            </span>
+                          </div>
+                          {isCategoryEligible && item.available !== false && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleProductCardClick(item);
+                              }}
+                              className="bg-red-600 hover:bg-red-500 text-white p-2 md:p-2.5 rounded-lg md:rounded-xl shadow-lg border border-red-500/50 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
+                              title="Customizar com Adicionais"
+                            >
+                              <Plus size={18} className="font-bold" />
+                            </button>
+                          )}
                         </div>
+
                         {item.highlight && item.available !== false && (
                           <div className="absolute top-4 left-4 md:top-6 md:left-6 bg-red-600 text-white text-[10px] md:text-[10px] uppercase font-black tracking-[0.2em] px-3 py-1 rounded-full">
                             Pop
@@ -151,20 +191,30 @@ export default function Menu() {
                             </span>
                           </div>
                         )}
-                        <h3 className="absolute bottom-4 left-4 right-4 md:bottom-6 md:left-6 md:right-6 text-2xl font-black uppercase tracking-tight text-white leading-tight z-20">{item.name}</h3>
+                        <p className="absolute bottom-4 left-4 right-4 md:bottom-6 md:left-6 md:right-6 text-2xl font-black uppercase tracking-tight text-white leading-tight z-20">{item.name}</p>
                       </div>
                     )}
                     <div className="p-6 md:p-8 flex-1 flex flex-col bg-zinc-950/80">
                       {!item.image && (
-                         <h3 className="text-2xl font-black uppercase tracking-tight mb-4 text-white group-hover:text-red-600 transition-colors">{item.name}</h3>
+                         <p className="text-2xl font-black uppercase tracking-tight mb-4 text-white group-hover:text-red-600 transition-colors">{item.name}</p>
                       )}
                       <div className="flex-1 mb-8">
                         <p className="text-gray-300 text-base md:text-lg leading-relaxed font-medium">
                           {item.description}
                         </p>
                         {!item.image && (
-                          <div className="mt-4">
-                            <span className="text-red-500 font-black tracking-widest text-lg">{item.priceText || `R$ ${item.price.toFixed(2)}`}</span>
+                          <div className="mt-4 flex items-center justify-between">
+                            <span className="text-red-500 font-black tracking-widest text-lg">
+                              {item.priceText || `R$ ${item.price.toFixed(2)}`}
+                            </span>
+                            {isCategoryEligible && item.available !== false && (
+                              <button
+                                onClick={() => handleProductCardClick(item)}
+                                className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 transition"
+                              >
+                                <Plus size={16} /> Customizar
+                              </button>
+                            )}
                           </div>
                         )}
                         {item.meatOptions && item.meatOptions.length > 0 && (
@@ -175,7 +225,7 @@ export default function Menu() {
                             {item.meatOptions.map((opt, i) => (
                               <button
                                 key={i}
-                                onClick={() => addToCart(item, opt)}
+                                onClick={() => handleProductCardClick(item, opt)}
                                 disabled={item.available === false}
                                 className={`w-full flex justify-between items-center text-left text-xs bg-zinc-900/50 p-3 rounded-xl border border-white/5 transition-colors group/opt ${
                                   item.available === false ? 'opacity-50 cursor-not-allowed' : 'hover:bg-zinc-800'
@@ -186,7 +236,7 @@ export default function Menu() {
                                   <span className="text-red-500 font-black">R$ {opt.price.toFixed(2)}</span>
                                 </div>
                                 <span className="bg-white/5 group-hover/opt:bg-red-600 text-gray-400 group-hover/opt:text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-1">
-                                  <Plus size={14} /> Add
+                                  <Plus size={14} /> {isCategoryEligible ? 'Customizar' : 'Add'}
                                 </span>
                               </button>
                             ))}
@@ -200,16 +250,22 @@ export default function Menu() {
                       </div>
                       {(!item.meatOptions || item.meatOptions.length === 0) && (
                         <button
-                          onClick={() => addToCart(item)}
+                          onClick={() => handleProductCardClick(item)}
                           disabled={item.available === false}
                           className={`w-full py-5 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${
                             item.available === false 
                               ? 'bg-zinc-800 text-gray-500 cursor-not-allowed' 
+                              : isCategoryEligible
+                              ? 'bg-red-600 text-white hover:bg-red-500 group-hover:scale-[1.02]'
                               : 'bg-white text-black hover:bg-red-600 hover:text-white group-hover:scale-[1.02]'
                           }`}
                         >
-                          <ShoppingCart size={18} />
-                          {item.available === false ? 'ESGOTADO' : 'ADICIONAR'}
+                          {isCategoryEligible ? <Plus size={18} /> : <ShoppingCart size={18} />}
+                          {item.available === false
+                            ? 'ESGOTADO'
+                            : isCategoryEligible
+                            ? 'MONTAR / CUSTOMIZAR'
+                            : 'ADICIONAR'}
                         </button>
                       )}
                     </div>
@@ -221,6 +277,18 @@ export default function Menu() {
         })}
 
       </div>
+
+      {/* Product Customization Modal */}
+      <ProductCustomizationModal
+        item={modalItem}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setModalItem(null);
+          setModalInitialOption(undefined);
+        }}
+        initialOption={modalInitialOption}
+      />
     </div>
   );
 }
