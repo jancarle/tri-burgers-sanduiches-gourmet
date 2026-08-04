@@ -1,12 +1,15 @@
+// ADDONS_CART_MODEL_2026_08_04
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { MenuItem } from '../types';
+import { MenuItem, SelectedAddon } from '../types';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { generateCartItemId, getItemLineTotal } from '../lib/addonUtils';
 
 export interface CartItem extends MenuItem {
   cartItemId: string;
   quantity: number;
   selectedOption?: { name: string; price: number };
+  selectedAddons?: SelectedAddon[];
 }
 
 export interface SiteImages {
@@ -27,7 +30,12 @@ export const DEFAULT_SITE_IMAGES: SiteImages = {
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (item: MenuItem, selectedOption?: { name: string; price: number }) => void;
+  addToCart: (
+    item: MenuItem,
+    selectedOption?: { name: string; price: number },
+    selectedAddons?: SelectedAddon[],
+    quantityToAdd?: number
+  ) => void;
   removeFromCart: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   cartTotal: number;
@@ -41,11 +49,35 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const LOCAL_STORAGE_CART_KEY = 'tri_burgers_cart_v2';
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_CART_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cart from localStorage:', e);
+    }
+    return [];
+  });
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [siteImages, setSiteImages] = useState<SiteImages>(DEFAULT_SITE_IMAGES);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_CART_KEY, JSON.stringify(cart));
+    } catch (e) {
+      console.error('Error saving cart to localStorage:', e);
+    }
+  }, [cart]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'store'), (docSnap) => {
@@ -67,17 +99,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, []);
 
-  const addToCart = (item: MenuItem, selectedOption?: { name: string; price: number }) => {
+  const addToCart = (
+    item: MenuItem,
+    selectedOption?: { name: string; price: number },
+    selectedAddons?: SelectedAddon[],
+    quantityToAdd: number = 1
+  ) => {
+    const activeAddons = selectedAddons ? selectedAddons.filter(a => a.quantity > 0) : undefined;
+    const cartItemId = generateCartItemId(item.id, selectedOption, activeAddons);
+
     setCart(prev => {
-      // Create a unique ID based on the item ID AND the selected option's name.
-      // This ensures "Simples (Frango)" is tracked entirely separately from "Simples (Mignon)".
-      // But adding another "Simples (Frango)" will correctly increment its quantity.
-      const cartItemId = item.id + (selectedOption ? `-opt-${selectedOption.name}` : '');
       const existing = prev.find(i => i.cartItemId === cartItemId);
       if (existing) {
-        return prev.map(i => i.cartItemId === cartItemId ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i =>
+          i.cartItemId === cartItemId
+            ? { ...i, quantity: i.quantity + quantityToAdd }
+            : i
+        );
       }
-      return [...prev, { ...item, cartItemId, quantity: 1, selectedOption }];
+      return [
+        ...prev,
+        {
+          ...item,
+          cartItemId,
+          quantity: Math.max(1, quantityToAdd),
+          selectedOption,
+          selectedAddons: activeAddons && activeAddons.length > 0 ? activeAddons : undefined,
+        }
+      ];
     });
     setIsCartOpen(true);
   };
@@ -96,10 +145,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const cartTotal = cart.reduce((sum, item) => {
-    const itemPrice = item.selectedOption ? item.selectedOption.price : item.price;
-    return sum + (itemPrice * item.quantity);
-  }, 0);
+  const cartTotal = cart.reduce((sum, item) => sum + getItemLineTotal(item), 0);
   const cartQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
