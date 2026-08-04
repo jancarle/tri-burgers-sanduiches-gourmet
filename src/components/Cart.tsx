@@ -1,16 +1,22 @@
-import React, { useState } from 'react';
+// ADDONS_ORDER_WHATSAPP_2026_08_04
+import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, Plus, Minus, Trash2, Send } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { WHATSAPP_CONFIG } from '../constants';
+import { getBaseUnitPrice, getConfiguredUnitPrice, getItemLineTotal } from '../lib/addonUtils';
 
 export default function Cart() {
   const { cart, cartTotal, cartQuantity, updateQuantity, removeFromCart, isCartOpen, setIsCartOpen, clearCart, isStoreOpen } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [formError, setFormError] = useState('');
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const checkoutLockRef = useRef(false);
 
   const handleCheckout = async () => {
+    if (checkoutLockRef.current) return;
+
     if (!isStoreOpen) {
       setFormError('A loja está fechada no momento. Não é possível fazer pedidos.');
       return;
@@ -26,17 +32,41 @@ export default function Cart() {
     }
     
     setFormError('');
+    checkoutLockRef.current = true;
+    setIsCheckingOut(true);
 
     let message = `*🍔 Pedido recebido no WhatsApp*\n---------------------------\n\n`;
     
     cart.forEach(item => {
-      const itemPrice = item.selectedOption ? item.selectedOption.price : item.price;
-      const variationName = item.selectedOption ? ` (${item.selectedOption.name})` : '';
-      message += `${item.quantity}x ${item.name}${variationName} -- R$ ${(itemPrice * item.quantity).toFixed(2)}\n`;
+      const lineTotal = getItemLineTotal(item);
+
+      message += `${item.quantity}x ${item.name}\n`;
+      if (item.selectedOption) {
+        message += `Variação: ${item.selectedOption.name}\n`;
+      }
+      if (item.selectedAddons && item.selectedAddons.length > 0) {
+        if (item.quantity > 1) {
+          message += `\nAdicionais por unidade:\n`;
+          item.selectedAddons.forEach(addon => {
+            message += `+ ${addon.quantity}x ${addon.name} — R$ ${(addon.price * addon.quantity).toFixed(2).replace('.', ',')}\n`;
+          });
+          message += `\nTotal de adicionais nesta linha:\n`;
+          item.selectedAddons.forEach(addon => {
+            message += `+ ${addon.quantity * item.quantity}x ${addon.name}\n`;
+          });
+          message += `\n`;
+        } else {
+          message += `Adicionais:\n`;
+          item.selectedAddons.forEach(addon => {
+            message += `+ ${addon.quantity}x ${addon.name} — R$ ${(addon.price * addon.quantity).toFixed(2).replace('.', ',')}\n`;
+          });
+        }
+      }
+      message += `Subtotal do item: R$ ${lineTotal.toFixed(2).replace('.', ',')}\n\n`;
     });
 
-    message += `\n*Total da Sacola:* R$ ${cartTotal.toFixed(2)}\n\n`;
-    message += `*Cliente:* ${customerName}\n`;
+    message += `*Total da Sacola:* R$ ${cartTotal.toFixed(2).replace('.', ',')}\n\n`;
+    message += `*Cliente:* ${customerName.trim()}\n`;
     message += `*Forma de Pagamento:* ${paymentMethod}\n`;
     message += `*Endereço:* (Prezado cliente, queira por favor, enviar sua localização ou endereço abaixo)\n`;
 
@@ -44,18 +74,32 @@ export default function Cart() {
     const whatsappUrl = `${WHATSAPP_CONFIG.baseUrl}?phone=${WHATSAPP_CONFIG.number}&text=${encodedMessage}`;
     
     // Abre o WhatsApp imediatamente, antes de qualquer operação assíncrona
-    window.open(whatsappUrl, '_blank');
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
 
     const orderData = {
-      customerName,
+      customerName: customerName.trim(),
       paymentMethod,
-      items: cart.map(item => ({
-        id: item.id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.selectedOption ? item.selectedOption.price : item.price,
-        variation: item.selectedOption ? item.selectedOption.name : null,
-      })),
+      items: cart.map(item => {
+        const basePrice = getBaseUnitPrice(item);
+        const configuredUnitPrice = getConfiguredUnitPrice(item);
+
+        return {
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: basePrice,
+          variation: item.selectedOption ? item.selectedOption.name : null,
+          selectedAddons: item.selectedAddons && item.selectedAddons.length > 0
+            ? item.selectedAddons.map(a => ({
+                id: a.id,
+                name: a.name,
+                price: a.price,
+                quantity: a.quantity
+              }))
+            : null,
+          configuredUnitPrice,
+        };
+      }),
       total: cartTotal,
       status: 'pendente', // pendente, preparando, concluido
       createdAt: new Date().toISOString(),
@@ -67,10 +111,12 @@ export default function Cart() {
       await addDoc(collection(db, 'orders'), orderData);
     } catch (e) {
       console.error("Erro ao salvar pedido no DB:", e);
+    } finally {
+      clearCart();
+      setIsCartOpen(false);
+      checkoutLockRef.current = false;
+      setIsCheckingOut(false);
     }
-    
-    clearCart();
-    setIsCartOpen(false);
   };
 
   return (
@@ -123,43 +169,61 @@ export default function Cart() {
                 ) : (
                   <div className="space-y-6">
                     <div className="space-y-4">
-                      {cart.map(item => (
-                        <div key={item.cartItemId} className="flex gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/5 relative group">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-xl shrink-0" />
-                          ) : (
-                            <div className="w-20 h-20 bg-zinc-800 rounded-xl flex items-center justify-center shrink-0 border border-white/5">
-                              <Plus size={24} className="text-gray-500" />
-                            </div>
-                          )}
-                          <div className="flex-1 flex flex-col justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-white font-bold text-sm uppercase leading-tight line-clamp-1">{item.name}</h4>
-                                {item.selectedOption && (
-                                  <span className="bg-red-600/20 text-red-500 text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
-                                    {item.selectedOption.name}
-                                  </span>
+                      {cart.map(item => {
+                        const lineTotal = getItemLineTotal(item);
+                        return (
+                          <div key={item.cartItemId} className="flex gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/5 relative group">
+                            {item.image ? (
+                              <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-xl shrink-0" />
+                            ) : (
+                              <div className="w-20 h-20 bg-zinc-800 rounded-xl flex items-center justify-center shrink-0 border border-white/5">
+                                <Plus size={24} className="text-gray-500" />
+                              </div>
+                            )}
+                            <div className="flex-1 flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-white font-bold text-sm uppercase leading-tight line-clamp-1">{item.name}</h4>
+                                  {item.selectedOption && (
+                                    <span className="bg-red-600/20 text-red-500 text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                                      {item.selectedOption.name}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {item.selectedAddons && item.selectedAddons.length > 0 && (
+                                  <div className="mt-2 text-[11px] text-zinc-400 bg-black/40 p-2 rounded-lg border border-white/5 space-y-1">
+                                    <span className="font-bold uppercase text-[9px] text-red-400 block tracking-wider">
+                                      {item.quantity > 1 ? 'Adicionais por unidade:' : 'Adicionais:'}
+                                    </span>
+                                    {item.selectedAddons.map((addon) => (
+                                      <div key={addon.id} className="flex justify-between items-center text-zinc-300">
+                                        <span>+ {addon.quantity}x {addon.name}</span>
+                                        <span className="text-zinc-500 text-[10px]">R$ {(addon.price * addon.quantity).toFixed(2).replace('.', ',')}</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
+
+                                <p className="text-red-500 font-black mt-2 text-sm">
+                                  R$ {lineTotal.toFixed(2).replace('.', ',')}
+                                </p>
                               </div>
-                              <p className="text-red-500 font-black mt-1">
-                                R$ {((item.selectedOption ? item.selectedOption.price : item.price) * item.quantity).toFixed(2)}
-                              </p>
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-2">
-                              <div className="flex items-center gap-3 bg-black rounded-lg p-1 border border-white/10">
-                                <button onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)} className="text-gray-400 hover:text-white p-1"><Minus size={14} /></button>
-                                <span className="text-white font-bold text-xs w-4 text-center">{item.quantity}</span>
-                                <button onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)} className="text-gray-400 hover:text-white p-1"><Plus size={14} /></button>
+                              
+                              <div className="flex items-center justify-between mt-3">
+                                <div className="flex items-center gap-3 bg-black rounded-lg p-1 border border-white/10">
+                                  <button onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)} className="text-gray-400 hover:text-white p-1"><Minus size={14} /></button>
+                                  <span className="text-white font-bold text-xs w-4 text-center">{item.quantity}</span>
+                                  <button onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)} className="text-gray-400 hover:text-white p-1"><Plus size={14} /></button>
+                                </div>
+                                <button onClick={() => removeFromCart(item.cartItemId)} className="text-gray-500 hover:text-red-500 transition-colors">
+                                  <Trash2 size={16} />
+                                </button>
                               </div>
-                              <button onClick={() => removeFromCart(item.cartItemId)} className="text-gray-500 hover:text-red-500 transition-colors">
-                                <Trash2 size={16} />
-                              </button>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="pt-6 border-t border-white/10 space-y-4">
@@ -204,15 +268,21 @@ export default function Cart() {
                 <div className="p-6 bg-black border-t border-white/10">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-400 font-bold uppercase tracking-widest text-xs">Total do Pedido</span>
-                    <span className="text-2xl font-black text-white">R$ {cartTotal.toFixed(2)}</span>
+                    <span className="text-2xl font-black text-white">R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
                   </div>
                   <div className="flex flex-col gap-3">
                     {isStoreOpen ? (
                       <button 
                         onClick={handleCheckout}
-                        className="w-full bg-green-600 hover:bg-green-500 text-white font-black tracking-widest uppercase py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(22,163,74,0.3)] flex items-center justify-center gap-3 active:scale-95 border border-green-500/50"
+                        disabled={isCheckingOut}
+                        aria-busy={isCheckingOut}
+                        className="w-full bg-green-600 hover:bg-green-500 text-white font-black tracking-widest uppercase py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(22,163,74,0.3)] flex items-center justify-center gap-3 active:scale-95 border border-green-500/50 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                       >
-                        Confirmar Pedido <Send size={18} />
+                        {isCheckingOut ? (
+                          'Enviando Pedido...'
+                        ) : (
+                          <>Confirmar Pedido <Send size={18} /></>
+                        )}
                       </button>
                     ) : (
                       <button 
