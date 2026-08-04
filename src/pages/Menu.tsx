@@ -172,7 +172,7 @@ export default function Menu() {
                                 handleProductCardClick(item);
                               }}
                               className="bg-red-600 hover:bg-red-500 text-white p-2 md:p-2.5 rounded-lg md:rounded-xl shadow-lg border border-red-500/50 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
-                              title="Customizar com Adicionais"
+                              title="Pedir este produto"
                             >
                               <Plus size={18} className="font-bold" />
                             </button>
@@ -212,7 +212,7 @@ export default function Menu() {
                                 onClick={() => handleProductCardClick(item)}
                                 className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 transition"
                               >
-                                <Plus size={16} /> Customizar
+                                <Plus size={16} /> Pedir
                               </button>
                             )}
                           </div>
@@ -236,7 +236,7 @@ export default function Menu() {
                                   <span className="text-red-500 font-black">R$ {opt.price.toFixed(2)}</span>
                                 </div>
                                 <span className="bg-white/5 group-hover/opt:bg-red-600 text-gray-400 group-hover/opt:text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-1">
-                                  <Plus size={14} /> {isCategoryEligible ? 'Customizar' : 'Add'}
+                                  <Plus size={14} /> {isCategoryEligible ? 'Escolher' : 'Adicionar'}
                                 </span>
                               </button>
                             ))}
@@ -264,7 +264,7 @@ export default function Menu() {
                           {item.available === false
                             ? 'ESGOTADO'
                             : isCategoryEligible
-                            ? 'MONTAR / CUSTOMIZAR'
+                            ? 'PEDIR'
                             : 'ADICIONAR'}
                         </button>
                       )}
