@@ -173,6 +173,7 @@ export default function AdminPanel() {
         setIsLoadingAddons(false);
       }, (err) => {
         console.error("Erro ao escutar coleção 'addons':", err);
+        setAddons([]);
         setIsLoadingAddons(false);
       });
       
@@ -650,18 +651,71 @@ export default function AdminPanel() {
                       </span>
                     </div>
                     
+                    {/* // ADDONS_KITCHEN_DISPLAY_2026_08_04 */}
                     <div className="flex-1 bg-zinc-900 rounded-xl p-4 mb-4 border border-zinc-700/50">
                       <ul className="space-y-3">
-                        {order.items?.map((item: any, idx: number) => (
-                          <li key={idx} className="flex justify-between items-start border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
-                            <div>
-                              <span className="font-black text-red-500 mr-2">{item.quantity}x</span>
-                              <span className="text-sm text-white font-bold">{item.name}</span>
-                              {item.variation && <div className="text-[11px] text-zinc-500 ml-6 uppercase">{item.variation}</div>}
-                            </div>
-                            <span className="text-xs font-bold text-zinc-400">R$ {(item.price * item.quantity).toFixed(2)}</span>
-                          </li>
-                        ))}
+                        {(Array.isArray(order.items) ? order.items : []).map((item: any, idx: number) => {
+                          const selectedAddons = Array.isArray(item.selectedAddons) ? item.selectedAddons : [];
+                          const basePrice = Number(item.price) || 0;
+                          const addonsSum = selectedAddons.reduce((sum: number, addon: any) => {
+                            const addonPrice = Number(addon?.price) || 0;
+                            const addonQuantity = Math.max(0, Number(addon?.quantity) || 0);
+                            return sum + (addonPrice * addonQuantity);
+                          }, 0);
+
+                          const storedConfiguredUnit = Number(item.configuredUnitPrice);
+                          const hasStoredConfiguredUnit =
+                            item.configuredUnitPrice !== undefined &&
+                            item.configuredUnitPrice !== null &&
+                            Number.isFinite(storedConfiguredUnit);
+
+                          const configuredUnit = hasStoredConfiguredUnit
+                            ? storedConfiguredUnit
+                            : basePrice + addonsSum;
+
+                          const mainQuantity = Math.max(1, Number(item.quantity) || 1);
+                          const itemTotal = configuredUnit * mainQuantity;
+
+                          return (
+                            <li key={idx} className="flex justify-between items-start border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
+                              <div>
+                                <span className="font-black text-red-500 mr-2">{mainQuantity}x</span>
+                                <span className="text-sm text-white font-bold">{item.name}</span>
+                                {item.variation && (
+                                  <div className="text-[11px] text-zinc-500 ml-6 uppercase">
+                                    Variação: {item.variation}
+                                  </div>
+                                )}
+                                {selectedAddons.length > 0 && (
+                                  <div className="ml-6 mt-1 text-[11px] text-red-400 space-y-0.5">
+                                    <span className="font-bold uppercase tracking-wider text-[9px] text-zinc-500 block">
+                                      Adicionais {mainQuantity > 1 ? '(por un.):' : ':'}
+                                    </span>
+                                    {selectedAddons.map((addon: any, aIdx: number) => {
+                                      const addonPrice = Number(addon?.price) || 0;
+                                      const addonQuantity = Math.max(0, Number(addon?.quantity) || 0);
+                                      const addonUnitTotal = addonPrice * addonQuantity;
+
+                                      return (
+                                        <div key={addon?.id || aIdx} className="flex items-center gap-1 font-semibold">
+                                          <span>+ {addonQuantity}x {addon?.name || 'Adicional'}</span>
+                                          {addonUnitTotal > 0 && (
+                                            <span className="text-zinc-500 text-[10px]">
+                                              (R$ {addonUnitTotal.toFixed(2).replace('.', ',')})
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-xs font-bold text-zinc-400">
+                                R$ {itemTotal.toFixed(2).replace('.', ',')}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                     
@@ -672,7 +726,7 @@ export default function AdminPanel() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-zinc-500 uppercase font-bold tracking-widest">Total</p>
-                        <p className="text-lg font-black text-green-500">R$ {order.total?.toFixed(2)}</p>
+                        <p className="text-lg font-black text-green-500">R$ {(Number(order.total) || 0).toFixed(2).replace('.', ',')}</p>
                       </div>
                     </div>
                     
