@@ -1,25 +1,66 @@
 import { motion } from 'motion/react';
 import { ShoppingCart, Flame, Plus } from 'lucide-react';
 import { MENU_ITEMS, TRADITIONAL_BURGERS, CATEGORIES } from '../constants';
-import { MenuItem, Category } from '../types';
+import { MenuItem, Category, Addon } from '../types';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
-import { collection } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMemo, useEffect, useState } from 'react';
 import { useCart } from '../contexts/CartContext';
 import { WHATSAPP_CONFIG } from '../constants';
 import ProductCustomizationModal from '../components/ProductCustomizationModal';
 import { isCategoryExcludedFromCustomization } from '../lib/addonUtils';
+import { toast } from 'sonner';
 
 export default function Menu() {
   const [snapshot, loading] = useCollectionData(collection(db, 'menu'));
   const { addToCart } = useCart();
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
+  // Firestore Add-ons State for Public Section
+  const [firestoreAddons, setFirestoreAddons] = useState<Addon[]>([]);
+
   // Modal State for Product Customization
   const [modalItem, setModalItem] = useState<MenuItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [modalInitialOption, setModalInitialOption] = useState<{ name: string; price: number } | undefined>(undefined);
+
+  // PUBLIC_ADDONS_FIRESTORE_SECTION_2026_08_05
+  useEffect(() => {
+    const q = query(collection(db, 'addons'), orderBy('order', 'asc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const list: Addon[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          list.push({
+            id: docSnap.id,
+            name: data.name || '',
+            price: Number(data.price) || 0,
+            available: data.available === true,
+            order: Number(data.order) || 0,
+            image: data.image || '',
+            description: data.description || '',
+            publicVisible: data.publicVisible === true,
+          } as Addon);
+        });
+        list.sort((a, b) => a.order - b.order);
+        setFirestoreAddons(list);
+      },
+      (err) => {
+        console.error("Erro ao escutar coleção 'addons' no Cardápio público:", err);
+        setFirestoreAddons([]);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const publicFirestoreAddons = useMemo(() => {
+    return firestoreAddons.filter((a) => a.available === true && a.publicVisible === true);
+  }, [firestoreAddons]);
+
+  const hasPublicFirestoreAddons = publicFirestoreAddons.length > 0;
 
   const handleProductCardClick = (item: MenuItem, option?: { name: string; price: number }) => {
     if (item.available === false) return;
@@ -35,11 +76,20 @@ export default function Menu() {
 
   // Use Firebase data if it exists, otherwise use local constants
   const allItems = useMemo(() => {
+    let list: MenuItem[] = [];
     if (!loading && snapshot && snapshot.length > 0) {
-      return (snapshot as MenuItem[]).sort((a, b) => CATEGORIES.indexOf(a.category as Category) - CATEGORIES.indexOf(b.category as Category));
+      list = (snapshot as MenuItem[]).sort(
+        (a, b) => CATEGORIES.indexOf(a.category as Category) - CATEGORIES.indexOf(b.category as Category)
+      );
+    } else {
+      list = [...TRADITIONAL_BURGERS, ...MENU_ITEMS];
     }
-    return [...TRADITIONAL_BURGERS, ...MENU_ITEMS];
-  }, [snapshot, loading]);
+
+    if (hasPublicFirestoreAddons) {
+      return list.filter((item) => item.category !== 'Adicionais');
+    }
+    return list;
+  }, [snapshot, loading, hasPublicFirestoreAddons]);
 
   // Efeito para tratar o parâmetro de compartilhamento ?p=ID
   useEffect(() => {
@@ -66,7 +116,19 @@ export default function Menu() {
     }
   }, [allItems]);
 
-  const categories = Array.from(new Set(allItems.map((item) => item.category))) as Category[];
+  const categories = useMemo(() => {
+    const catsFromItems = Array.from(new Set(allItems.map((item) => item.category))) as Category[];
+    if (hasPublicFirestoreAddons && !catsFromItems.includes('Adicionais')) {
+      const allCats = [...catsFromItems, 'Adicionais' as Category];
+      allCats.sort((a, b) => {
+        const indexA = CATEGORIES.indexOf(a);
+        const indexB = CATEGORIES.indexOf(b);
+        return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+      });
+      return allCats;
+    }
+    return catsFromItems;
+  }, [allItems, hasPublicFirestoreAddons]);
 
   const handleOrder = (itemName: string) => {
     const message = encodeURIComponent(`Olá! Gostaria de pedir o item: ${itemName}`);
@@ -120,6 +182,81 @@ export default function Menu() {
       <div className="max-w-7xl mx-auto px-4 pb-24">
         {categories.map((cat) => {
           const catId = `cat-${cat.replace(/\s+/g, '-').toLowerCase()}`;
+
+          if (cat === 'Adicionais' && hasPublicFirestoreAddons) {
+            return (
+              <div key="Adicionais" id="cat-adicionais" className="scroll-mt-36 mb-24">
+                <div className="flex items-center gap-4 mb-10">
+                  <Flame className="text-red-600 shrink-0" size={32} />
+                  <h3 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Adicionais</h3>
+                  <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent ml-4"></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {publicFirestoreAddons.map((addon, idx) => (
+                    <motion.div
+                      key={addon.id}
+                      id={`product-addon-${addon.id}`}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      whileInView={{ opacity: 1, scale: 1 }}
+                      viewport={{ once: true, margin: "-50px" }}
+                      transition={{ delay: (idx % 3) * 0.1 }}
+                      className="bg-zinc-900/40 border border-white/5 hover:border-red-600/30 hover:shadow-[0_20px_50px_rgba(220,38,38,0.15)] rounded-[3rem] overflow-hidden transition-all duration-500 group flex flex-col shadow-2xl relative"
+                    >
+                      <div className="aspect-[4/3] overflow-hidden relative bg-zinc-950">
+                        <img
+                          src={addon.image || 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&q=80&w=800'}
+                          alt={addon.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
+
+                        <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-2 z-20">
+                          <div className="bg-black/80 backdrop-blur-md px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl border border-white/10">
+                            <span className="text-red-500 font-black tracking-widest text-sm md:text-base">
+                              R$ {addon.price.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="absolute bottom-4 left-4 right-4 md:bottom-6 md:left-6 md:right-6 text-2xl font-black uppercase tracking-tight text-white leading-tight z-20">
+                          {addon.name}
+                        </p>
+                      </div>
+
+                      <div className="p-6 md:p-8 flex-1 flex flex-col bg-zinc-950/80 justify-between">
+                        <p className="text-gray-300 text-base md:text-lg leading-relaxed font-medium mb-8">
+                          {addon.description || 'Adicional extra para turbinar seu pedido.'}
+                        </p>
+
+                        {/* PUBLIC_ADDONS_DIRECT_CART_2026_08_05 */}
+                        <button
+                          onClick={() => {
+                            const standaloneItem: MenuItem = {
+                              id: `standalone-addon-${addon.id}`,
+                              name: addon.name,
+                              description: addon.description || 'Adicional para o pedido',
+                              price: addon.price,
+                              category: 'Adicionais',
+                              image: addon.image,
+                              available: addon.available !== false,
+                            };
+                            addToCart(standaloneItem);
+                            toast.success(`${addon.name} adicionado ao carrinho!`);
+                          }}
+                          className="w-full py-5 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 bg-red-600 text-white hover:bg-red-500 group-hover:scale-[1.02] active:scale-95 cursor-pointer shadow-lg"
+                        >
+                          <Plus size={18} />
+                          ADICIONAR
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
           const categoryItems = allItems.filter(item => item.category === cat);
 
           if (categoryItems.length === 0) return null;
