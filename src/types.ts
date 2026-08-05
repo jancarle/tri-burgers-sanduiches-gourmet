@@ -6,6 +6,9 @@ export interface Addon {
   order: number;
   createdAt?: string;
   updatedAt?: string;
+  image?: string;
+  description?: string;
+  publicVisible?: boolean;
 }
 
 export interface SelectedAddon {
