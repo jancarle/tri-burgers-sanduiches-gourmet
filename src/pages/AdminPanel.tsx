@@ -52,6 +52,85 @@ export default function AdminPanel() {
   const [isImportingAddons, setIsImportingAddons] = useState(false);
   const [editingAddon, setEditingAddon] = useState<Partial<Addon> | null>(null);
   const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
+  const [isUploadingAddonImage, setIsUploadingAddonImage] = useState(false);
+
+  // ADDON_IMAGE_UPLOAD_PARITY_2026_08_05
+  const handleAddonCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file) {
+      input.value = '';
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const isAllowedExtension = ['jpg', 'jpeg', 'png'].includes(fileExtension || '');
+
+    if (!allowedTypes.includes(file.type) || !isAllowedExtension) {
+      toast.error("Erro: Apenas imagens JPG ou PNG são permitidas.");
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Erro: A imagem deve ter no máximo 2 MB.");
+      input.value = '';
+      return;
+    }
+
+    setIsUploadingAddonImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/cloudinary/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let errorMsg = `HTTP Error ${response.status}`;
+
+        if (errorBody) {
+          try {
+            const parsedError = JSON.parse(errorBody);
+            errorMsg = parsedError?.error || parsedError?.message || errorBody;
+          } catch {
+            errorMsg = errorBody;
+          }
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const errorText = await response.text();
+        console.error("[CLOUDINARY ADDON] Resposta não-JSON:", errorText);
+        throw new Error("O servidor retornou uma resposta inválida.");
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.imageUrl) {
+        setEditingAddon(prev =>
+          prev ? { ...prev, image: data.imageUrl } : prev
+        );
+        toast.success("Imagem enviada ao Cloudinary com sucesso!");
+      } else {
+        throw new Error(data.error || "Erro desconhecido no servidor.");
+      }
+    } catch (err: any) {
+      console.error("[CLOUDINARY ADDON] ERRO:", err);
+      toast.error(`Não foi possível enviar a imagem: ${err.message || ""}`);
+    } finally {
+      setIsUploadingAddonImage(false);
+      input.value = '';
+    }
+  };
   
   // Marketing AI State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -1070,81 +1149,91 @@ export default function AdminPanel() {
                     {addons.map((addon) => (
                       <div
                         key={addon.id}
-                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                        className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 shadow ${
                           addon.available
-                            ? 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700'
-                            : 'bg-zinc-950/70 border-zinc-900 opacity-60'
+                            ? 'bg-zinc-800 border-zinc-700/50 hover:border-zinc-700'
+                            : 'bg-zinc-900/70 border-zinc-800 opacity-60'
                         }`}
                       >
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="text-xs font-mono px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">
-                              ID: {addon.id}
-                            </span>
-                            <span className="text-xs font-semibold px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded">
-                              Ordem: {addon.order}
-                            </span>
+                        <div className="flex gap-4">
+                          <div className="w-20 h-20 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700 flex-shrink-0">
+                            <img 
+                              src={addon.image || "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=200"} 
+                              alt={addon.name} 
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
+                              }}
+                            />
                           </div>
-
-                          {addon.image && (
-                            <div className="w-full h-24 rounded-xl overflow-hidden bg-black border border-zinc-800">
-                              <img src={addon.image} alt={addon.name} className="w-full h-full object-cover" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <span className="text-[10px] text-orange-500 font-black uppercase px-2 py-0.5 bg-orange-500/10 rounded border border-orange-500/10">
+                                    ID: {addon.id}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-bold uppercase px-2 py-0.5 bg-zinc-900 rounded border border-zinc-800">
+                                    Ordem: {addon.order}
+                                  </span>
+                                </div>
+                                <h4 className={`font-bold text-base truncate ${addon.available === false ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                                  {addon.name}
+                                </h4>
+                                <p className="text-red-400 font-black text-sm">
+                                  R$ {addon.price.toFixed(2).replace('.', ',')}
+                                </p>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingAddon({ ...addon });
+                                    setIsAddonModalOpen(true);
+                                  }}
+                                  className="p-2 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition"
+                                  title="Editar Adicional"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteAddon(addon.id, addon.name)}
+                                  className="p-2 hover:bg-red-500/10 rounded-lg text-zinc-600 hover:text-red-500 transition"
+                                  title="Excluir Adicional"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </div>
-                          )}
-
-                          <h4 className="font-bold text-white text-base">{addon.name}</h4>
-                          {addon.description && (
-                            <p className="text-xs text-zinc-400 line-clamp-2">{addon.description}</p>
-                          )}
-                          <p className="text-lg font-bold text-red-400 mt-1">
-                            R$ {addon.price.toFixed(2).replace('.', ',')}
-                          </p>
+                          </div>
                         </div>
 
-                        <div className="flex flex-col gap-2 pt-3 border-t border-zinc-800/80">
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              onClick={() => handleToggleAddonAvailable(addon)}
-                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition flex items-center gap-1 ${
-                                addon.available
-                                  ? 'bg-green-950/80 text-green-400 border border-green-800/50'
-                                  : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
-                              }`}
-                            >
-                              {addon.available ? <Check size={12} /> : <X size={12} />}
-                              {addon.available ? 'Disponível' : 'Indisponível'}
-                            </button>
+                        {addon.description && (
+                          <p className="text-xs text-zinc-400 line-clamp-1 italic">{addon.description}</p>
+                        )}
 
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                                addon.publicVisible
-                                  ? 'bg-blue-950/80 text-blue-400 border border-blue-800/50'
-                                  : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
-                              }`}
-                            >
-                              {addon.publicVisible ? 'Visível no Site' : 'Oculto no Site'}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-700/60">
+                          <button
+                            onClick={() => handleToggleAddonAvailable(addon)}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition flex items-center gap-1 ${
+                              addon.available
+                                ? 'bg-green-950/80 text-green-400 border border-green-800/50'
+                                : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                            }`}
+                          >
+                            {addon.available ? <Check size={12} /> : <X size={12} />}
+                            {addon.available ? 'Disponível' : 'Indisponível'}
+                          </button>
 
-                          <div className="flex items-center justify-end gap-1 pt-1">
-                            <button
-                              onClick={() => {
-                                setEditingAddon({ ...addon });
-                                setIsAddonModalOpen(true);
-                              }}
-                              className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition"
-                              title="Editar Adicional"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteAddon(addon.id, addon.name)}
-                              className="p-2 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 rounded-lg transition"
-                              title="Excluir Adicional"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                              addon.publicVisible
+                                ? 'bg-blue-950/80 text-blue-400 border border-blue-800/50'
+                                : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                            }`}
+                          >
+                            {addon.publicVisible ? 'Visível no Site' : 'Oculto no Site'}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1766,7 +1855,7 @@ export default function AdminPanel() {
         {/* Edit/Create Addon Modal */}
         {isAddonModalOpen && editingAddon && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-5 pb-3 border-b border-zinc-800">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Sparkles className="text-red-500" size={18} />
@@ -1856,22 +1945,89 @@ export default function AdminPanel() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    URL da Imagem
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={editingAddon.image || ''}
-                    onChange={(e) => setEditingAddon(prev => ({ ...prev, image: e.target.value }))}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition font-mono"
-                  />
-                  {editingAddon.image && (
-                    <div className="mt-2 w-full h-20 rounded-xl overflow-hidden bg-black border border-zinc-800">
-                      <img src={editingAddon.image} alt="Prévia" className="w-full h-full object-cover" />
+                <div className="space-y-3 pt-2 border-t border-zinc-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black">Imagem do Adicional (WhatsApp Preview)</label>
+                  </div>
+
+                  {/* Cloudinary Upload Section */}
+                  <div className="flex gap-2">
+                    <label className="flex-1 cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg p-3 hover:border-orange-500 transition-colors bg-zinc-900/30 group">
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={handleAddonCloudinaryUpload} 
+                        accept="image/jpeg,image/png" 
+                        disabled={isUploadingAddonImage} 
+                      />
+                      {isUploadingAddonImage ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                          <span className="text-[10px] text-zinc-500 font-bold uppercase">Enviando...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-zinc-500 group-hover:text-orange-500 transition-colors">
+                          <Upload size={16} />
+                          <span className="text-[10px] uppercase font-black text-center">Enviar Foto p/ Cloudinary</span>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* Manual HTTPS URL Input */}
+                  <div className="space-y-2">
+                    <input 
+                      type="url"
+                      className={`w-full bg-zinc-950 border ${editingAddon.image && !editingAddon.image.startsWith('https://') ? 'border-red-500' : 'border-zinc-800'} rounded-xl px-3 py-2 text-xs text-white focus:border-red-500 focus:outline-none transition font-mono`} 
+                      placeholder="https://site.com/sua-foto-gourmet.jpg"
+                      value={editingAddon.image || ''} 
+                      onChange={e => setEditingAddon(prev => ({ ...prev, image: e.target.value }))}
+                      onBlur={e => setEditingAddon(prev => ({ ...prev, image: normalizeImageUrl(e.target.value) }))}
+                    />
+                    
+                    {/* Large Aspect-Video Preview */}
+                    <div className="aspect-video w-full rounded-xl border border-zinc-800 bg-black overflow-hidden flex items-center justify-center relative group">
+                      {editingAddon.image ? (
+                        <>
+                          <img 
+                            src={editingAddon.image} 
+                            alt="Preview" 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000";
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Preview Digital</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-zinc-500">
+                          <ImageIcon size={24} />
+                          <span className="text-[10px] uppercase font-bold">Sem imagem definida</span>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Warnings and Tips */}
+                  <div className="space-y-2">
+                    <div className="text-[10px] text-zinc-400 bg-zinc-900/50 p-2 rounded border border-zinc-800">
+                      <span className="text-orange-500 font-black">DICA:</span> Use imagens do <a href="https://unsplash.com" target="_blank" rel="noreferrer" className="text-blue-400 underline">Unsplash</a> ou links diretos de alta qualidade.
+                    </div>
+
+                    {editingAddon.image?.toLowerCase().includes('.webp') && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
+                        <AlertCircle size={12} /> <span className="uppercase">Aviso:</span> WebP detectado. Use JPG ou PNG para garantir o preview.
+                      </div>
+                    )}
+                    
+                    {editingAddon.image && !editingAddon.image.startsWith('https://') && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-red-500 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">
+                        <Info size={12} /> <span className="uppercase">Erro:</span> A imagem precisa ser HTTPS (Segura).
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2 pt-2">
@@ -1915,9 +2071,20 @@ export default function AdminPanel() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-xl transition shadow-md flex items-center gap-2"
+                    disabled={isUploadingAddonImage}
+                    className="px-5 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition shadow-md flex items-center gap-2"
                   >
-                    <Save size={16} /> Salvar Adicional
+                    {isUploadingAddonImage ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Enviando imagem...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        <span>Salvar Adicional</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
