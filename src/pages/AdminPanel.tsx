@@ -224,6 +224,127 @@ export default function AdminPanel() {
     toast.success(`Importação concluída: ${createdCount} criados, ${existingCount} já existentes, ${failedCount} falhas.`);
   };
 
+  // PUBLIC_ADDONS_MEDIA_MIGRATION_2026_08_05
+  const [isMigratingMedia, setIsMigratingMedia] = useState(false);
+
+  const handleMigrateLegacyAddonMedia = async () => {
+    if (!isAgencyOwner) {
+      toast.error('Apenas a agência (marketingjan@gmail.com) pode executar esta migração.');
+      return;
+    }
+
+    if (!confirm('Deseja preencher as imagens e descrições dos 13 adicionais a partir dos 7 itens legados do cardápio? Campos customizados existentes não serão sobrescritos.')) {
+      return;
+    }
+
+    setIsMigratingMedia(true);
+
+    const mapping: Record<string, string> = {
+      add1: 'add1',  // Hambúrguer de Costela
+      add2: 'add1',  // Hambúrguer de Picanha
+      add3: 'add2',  // Filé Mignon
+      add4: 'add2',  // Picanha
+      add5: 'add3',  // Filé de Frango
+      add6: 'add4',  // Hambúrguer
+      add7: 'add5',  // Presunto
+      add8: 'add5',  // Salsicha
+      add9: 'add5',  // Ovo
+      add10: 'add6', // Queijo
+      add11: 'add6', // Bacon
+      add12: 'add7', // Catupiry
+      add13: 'add7', // Cheddar
+    };
+
+    let updatedCount = 0;
+    let alreadyConfiguredCount = 0;
+    let missingLegacyCount = 0;
+    let failedCount = 0;
+
+    try {
+      const legacyDocsMap: Record<string, Partial<MenuItem>> = {};
+      for (const legacyId of ['add1', 'add2', 'add3', 'add4', 'add5', 'add6', 'add7']) {
+        try {
+          const legacyRef = doc(db, 'menu', legacyId);
+          const legacySnap = await getDoc(legacyRef);
+          if (legacySnap.exists()) {
+            legacyDocsMap[legacyId] = legacySnap.data() as MenuItem;
+          }
+        } catch (e) {
+          console.error(`Erro ao buscar documento menu/${legacyId}:`, e);
+        }
+      }
+
+      for (let i = 1; i <= 13; i++) {
+        const addonId = `add${i}`;
+        const legacyId = mapping[addonId];
+        const legacyData = legacyDocsMap[legacyId];
+
+        if (!legacyData) {
+          missingLegacyCount++;
+          continue;
+        }
+
+        try {
+          const addonRef = doc(db, 'addons', addonId);
+          const addonSnap = await getDoc(addonRef);
+
+          if (!addonSnap.exists()) {
+            console.error(`Documento de adicional ${addonId} não existe em addons/. Impossível migrar mídias.`);
+            failedCount++;
+            continue;
+          }
+
+          const currentData: any = addonSnap.data() || {};
+
+          const hasImage = Boolean(currentData.image && String(currentData.image).trim() !== '');
+          const hasDesc = Boolean(currentData.description && String(currentData.description).trim() !== '');
+
+          const updatePayload: any = {
+            updatedAt: new Date().toISOString(),
+            publicVisible: true,
+          };
+
+          let needsUpdate = false;
+
+          if (!hasImage && legacyData.image) {
+            updatePayload.image = legacyData.image;
+            needsUpdate = true;
+          }
+
+          if (!hasDesc && legacyData.description) {
+            updatePayload.description = legacyData.description;
+            needsUpdate = true;
+          }
+
+          if (currentData.publicVisible !== true) {
+            updatePayload.publicVisible = true;
+            needsUpdate = true;
+          }
+
+          if (needsUpdate) {
+            await setDoc(addonRef, updatePayload, { merge: true });
+            updatedCount++;
+          } else {
+            alreadyConfiguredCount++;
+          }
+        } catch (err) {
+          console.error(`Erro ao atualizar mídias do adicional ${addonId}:`, err);
+          failedCount++;
+        }
+      }
+
+      toast.success(
+        `Migração de Mídias Concluída!\n• Atualizados: ${updatedCount}\n• Já configurados: ${alreadyConfiguredCount}\n• Fontes ausentes: ${missingLegacyCount}\n• Falhas: ${failedCount}`,
+        { duration: 6000 }
+      );
+    } catch (globalErr: any) {
+      console.error('Erro na migração de mídias dos adicionais:', globalErr);
+      toast.error('Erro ao executar migração: ' + (globalErr?.message || 'Erro desconhecido'));
+    } finally {
+      setIsMigratingMedia(false);
+    }
+  };
+
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAddon) return;
@@ -246,6 +367,20 @@ export default function AdminPanel() {
       return;
     }
 
+    const image = editingAddon.image?.trim() || '';
+    if (image) {
+      try {
+        const parsedUrl = new URL(image);
+        if (parsedUrl.protocol !== 'https:') {
+          toast.error('A imagem deve usar uma URL HTTPS válida.');
+          return;
+        }
+      } catch {
+        toast.error('A imagem deve usar uma URL HTTPS válida.');
+        return;
+      }
+    }
+
     const id = editingAddon.id || ('add_' + Date.now());
     const now = new Date().toISOString();
 
@@ -259,6 +394,9 @@ export default function AdminPanel() {
         price,
         available: editingAddon.available ?? true,
         order,
+        image,
+        description: editingAddon.description ? editingAddon.description.trim() : '',
+        publicVisible: editingAddon.publicVisible ?? false,
         updatedAt: now,
       };
       if (isNew) {
@@ -871,15 +1009,26 @@ export default function AdminPanel() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {isAgencyOwner && (
-                      <button
-                        onClick={handleImportInitialAddons}
-                        disabled={isImportingAddons}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl text-sm font-bold flex items-center gap-2 transition disabled:opacity-50"
-                        title="Importar os 13 adicionais padrão sem sobrescrever existentes"
-                      >
-                        {isImportingAddons ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <RefreshCw className="w-4 h-4 text-red-500" />}
-                        Importar adicionais atuais
-                      </button>
+                      <>
+                        <button
+                          onClick={handleImportInitialAddons}
+                          disabled={isImportingAddons}
+                          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold flex items-center gap-2 transition disabled:opacity-50"
+                          title="Importar os 13 adicionais padrão sem sobrescrever existentes"
+                        >
+                          {isImportingAddons ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <RefreshCw className="w-4 h-4 text-red-500" />}
+                          Importar adicionais atuais
+                        </button>
+                        <button
+                          onClick={handleMigrateLegacyAddonMedia}
+                          disabled={isMigratingMedia}
+                          className="px-3 py-2 bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/50 rounded-xl text-xs font-bold flex items-center gap-2 transition disabled:opacity-50"
+                          title="Preencher imagens e descrições dos 13 adicionais a partir dos 7 itens legados"
+                        >
+                          {isMigratingMedia ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <ImageIcon className="w-4 h-4 text-red-500" />}
+                          Preencher imagens dos 13 adicionais
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => {
@@ -887,11 +1036,12 @@ export default function AdminPanel() {
                           name: '',
                           price: 5.00,
                           available: true,
+                          publicVisible: true,
                           order: addons.length + 1,
                         });
                         setIsAddonModalOpen(true);
                       }}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold flex items-center gap-2 transition text-white shadow-md"
+                      className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-xs font-bold flex items-center gap-2 transition text-white shadow-md"
                     >
                       <Plus className="w-4 h-4" /> Novo Adicional
                     </button>
@@ -926,8 +1076,8 @@ export default function AdminPanel() {
                             : 'bg-zinc-950/70 border-zinc-900 opacity-60'
                         }`}
                       >
-                        <div>
-                          <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start gap-2">
                             <span className="text-xs font-mono px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">
                               ID: {addon.id}
                             </span>
@@ -935,26 +1085,48 @@ export default function AdminPanel() {
                               Ordem: {addon.order}
                             </span>
                           </div>
+
+                          {addon.image && (
+                            <div className="w-full h-24 rounded-xl overflow-hidden bg-black border border-zinc-800">
+                              <img src={addon.image} alt={addon.name} className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
                           <h4 className="font-bold text-white text-base">{addon.name}</h4>
+                          {addon.description && (
+                            <p className="text-xs text-zinc-400 line-clamp-2">{addon.description}</p>
+                          )}
                           <p className="text-lg font-bold text-red-400 mt-1">
                             R$ {addon.price.toFixed(2).replace('.', ',')}
                           </p>
                         </div>
 
-                        <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
-                          <button
-                            onClick={() => handleToggleAddonAvailable(addon)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 ${
-                              addon.available
-                                ? 'bg-green-950/80 text-green-400 border border-green-800/50'
-                                : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
-                            }`}
-                          >
-                            {addon.available ? <Check size={12} /> : <X size={12} />}
-                            {addon.available ? 'Disponível' : 'Indisponível'}
-                          </button>
+                        <div className="flex flex-col gap-2 pt-3 border-t border-zinc-800/80">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => handleToggleAddonAvailable(addon)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition flex items-center gap-1 ${
+                                addon.available
+                                  ? 'bg-green-950/80 text-green-400 border border-green-800/50'
+                                  : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                              }`}
+                            >
+                              {addon.available ? <Check size={12} /> : <X size={12} />}
+                              {addon.available ? 'Disponível' : 'Indisponível'}
+                            </button>
 
-                          <div className="flex items-center gap-1">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                addon.publicVisible
+                                  ? 'bg-blue-950/80 text-blue-400 border border-blue-800/50'
+                                  : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                              }`}
+                            >
+                              {addon.publicVisible ? 'Visível no Site' : 'Oculto no Site'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-1 pt-1">
                             <button
                               onClick={() => {
                                 setEditingAddon({ ...addon });
@@ -1671,17 +1843,63 @@ export default function AdminPanel() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="addonAvailableCheck"
-                    checked={editingAddon.available ?? true}
-                    onChange={(e) => setEditingAddon(prev => ({ ...prev, available: e.target.checked }))}
-                    className="w-4 h-4 accent-red-600 rounded cursor-pointer"
-                  />
-                  <label htmlFor="addonAvailableCheck" className="text-sm font-medium text-zinc-300 cursor-pointer select-none">
-                    Disponível para seleção
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Descrição do Adicional
                   </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ex: Fatias crocantes de bacon artesanal defumado"
+                    value={editingAddon.description || ''}
+                    onChange={(e) => setEditingAddon(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    URL da Imagem
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editingAddon.image || ''}
+                    onChange={(e) => setEditingAddon(prev => ({ ...prev, image: e.target.value }))}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition font-mono"
+                  />
+                  {editingAddon.image && (
+                    <div className="mt-2 w-full h-20 rounded-xl overflow-hidden bg-black border border-zinc-800">
+                      <img src={editingAddon.image} alt="Prévia" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="addonAvailableCheck"
+                      checked={editingAddon.available ?? true}
+                      onChange={(e) => setEditingAddon(prev => ({ ...prev, available: e.target.checked }))}
+                      className="w-4 h-4 accent-red-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="addonAvailableCheck" className="text-xs font-medium text-zinc-300 cursor-pointer select-none">
+                      Disponível para seleção no modal de customização
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="addonPublicVisibleCheck"
+                      checked={editingAddon.publicVisible ?? false}
+                      onChange={(e) => setEditingAddon(prev => ({ ...prev, publicVisible: e.target.checked }))}
+                      className="w-4 h-4 accent-red-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="addonPublicVisibleCheck" className="text-xs font-medium text-zinc-300 cursor-pointer select-none">
+                      Exibir na seção pública de adicionais
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-zinc-800">
