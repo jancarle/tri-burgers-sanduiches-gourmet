@@ -1,7 +1,15 @@
+GitHub Destination Path
+src/pages/About.tsx
+Complete File Contents (src/pages/About.tsx)
+code
+Tsx
 import { motion } from 'motion/react';
 import { History, Heart, Users, Award } from 'lucide-react';
+import { useCart } from '../contexts/CartContext';
 
 export default function About() {
+  const { siteImages } = useCart();
+
   return (
     <div className="bg-zinc-950 text-white font-sans">
       {/* FORJADOS NO FOGO E SABOR HEADER */}
@@ -15,13 +23,13 @@ export default function About() {
           >
             A LENDA TRI BURGERS
           </motion.span>
-          <motion.h1 
+          <motion.h2 
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             className="text-6xl sm:text-7xl md:text-[10rem] font-black tracking-tighter uppercase leading-[0.8] italic"
           >
             FORJADOS NO <br /><span className="text-red-600 not-italic">FOGO E SABOR.</span>
-          </motion.h1>
+          </motion.h2>
         </div>
       </section>
 
@@ -32,7 +40,7 @@ export default function About() {
             <div className="relative group mx-auto w-full max-w-sm md:max-w-full">
               <div className="aspect-square rounded-[3rem] md:rounded-[4rem] overflow-hidden border border-white/10 shadow-2xl rotate-3 group-hover:rotate-0 transition-transform duration-700">
                 <img 
-                  src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&q=80&w=1000" 
+                  src={siteImages.aboutImage} 
                   alt="A cozinha artesanal do Tri Burgers em Goiânia" 
                   className="w-full h-full object-cover opacity-90 group-hover:scale-110 group-hover:opacity-100 transition-all duration-700"
                   referrerPolicy="no-referrer"
@@ -89,3 +97,9 @@ export default function About() {
     </div>
   );
 }
+Verification Summary
+Import Check: useCart imported from ../contexts/CartContext (no DEFAULT_SITE_IMAGES).
+Hook Verification: const { siteImages } = useCart();
+JSX Binding: src={siteImages.aboutImage}
+Clean Structure: No local aboutImage variables, fallback fallthroughs, or onError overrides.
+Deployment Note: No automated production Vercel deployment occurred during this turn. This file is ready to be committed and pushed to your GitHub main branch to trigger your Vercel deployment pipeline.
